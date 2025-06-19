@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "IXField Cloud Configuration",
+        "description": "Enter your IXField Cloud credentials and device IDs",
+        "data": {
+          "email": "Email",
+          "password": "Password",
+          "devices": "Device IDs (comma-separated)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid authentication credentials"
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "IXField Options",
+        "description": "Update your IXField configuration",
+        "data": {
+          "devices": "Device IDs (comma-separated)"
+        }
+      }
+    }
+  }
+} 

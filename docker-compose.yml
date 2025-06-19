@@ -1,0 +1,14 @@
+---
+
+services:
+  homeassistant:
+    build: .
+    container_name: homeassistant-ixfield-test
+    ports:
+      - "8123:8123"
+    volumes:
+      - ./.data/config:/config
+      - ./config/configuration.yaml:/config/configuration.yaml
+      - ./custom_components/ixfield:/config/custom_components/ixfield
+    environment:
+      - TZ=Europe/Bratislava
