@@ -2,17 +2,19 @@
   "config": {
     "step": {
       "user": {
-        "title": "IXField Cloud Configuration",
-        "description": "Enter your IXField Cloud credentials and device IDs",
         "data": {
           "email": "Email",
           "password": "Password",
           "devices": "Device IDs (comma-separated)"
-        }
+        },
+        "description": "Enter your IXField Cloud credentials and device IDs.",
+        "title": "IXField Cloud Configuration"
       }
     },
     "error": {
-      "invalid_auth": "Invalid authentication credentials"
+      "cannot_connect": "Failed to connect to IXField Cloud",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error"
     },
     "abort": {
       "already_configured": "Device is already configured"
@@ -22,9 +24,152 @@
     "step": {
       "init": {
         "title": "IXField Options",
-        "description": "Update your IXField configuration",
+        "description": "Update your IXField configuration or manage sensors",
+        "data": {
+          "devices": "Device IDs (comma-separated)",
+          "action": "Action"
+        },
+        "description_placeholders": {
+          "devices_help": "Comma-separated device IDs",
+          "reload_help": "Refresh sensor data without rediscovery",
+          "reenumerate_help": "Rediscover all sensors and devices"
+        }
+      },
+      "reload_sensors": {
+        "title": "Reload Sensors",
+        "description": "This will refresh all sensor data from the IXField API without rediscovering sensors.",
+        "data": {
+          "confirm": "Confirm reload"
+        }
+      },
+      "reenumerate_sensors": {
+        "title": "Re-enumerate Sensors",
+        "description": "This will rediscover all sensors, switches, and other entities from your IXField devices. This may take a moment.",
+        "data": {
+          "confirm": "Confirm re-enumeration"
+        }
+      },
+      "update_devices": {
+        "title": "Update Device Configuration",
+        "description": "Update the list of devices to monitor. This will reload the integration with the new configuration.",
         "data": {
           "devices": "Device IDs (comma-separated)"
+        },
+        "description_placeholders": {
+          "devices_help": "Comma-separated device IDs"
+        }
+      }
+    },
+    "error": {
+      "no_devices": "At least one device ID is required",
+      "update_failed": "Failed to update device configuration",
+      "reload_failed": "Failed to reload sensors",
+      "reenumerate_failed": "Failed to re-enumerate sensors"
+    },
+    "abort": {
+      "integration_not_loaded": "Integration is not loaded",
+      "reload_failed": "Failed to reload sensors",
+      "reenumerate_failed": "Failed to re-enumerate sensors"
+    }
+  },
+  "services": {
+    "ixfield_device_control": {
+      "name": "IXField Device Control",
+      "description": "Control all aspects of an IXField device",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "The device ID to control"
+        },
+        "controls": {
+          "name": "Controls",
+          "description": "Control settings to apply",
+          "fields": {
+            "circulation_pump": {
+              "name": "Circulation Pump",
+              "description": "Turn circulation pump on/off"
+            },
+            "lighting": {
+              "name": "Lighting",
+              "description": "Turn lighting on/off"
+            },
+            "counterflow": {
+              "name": "Counterflow",
+              "description": "Turn counterflow on/off"
+            },
+            "target_temperature": {
+              "name": "Target Temperature",
+              "description": "Target water temperature in Celsius"
+            },
+            "target_orp": {
+              "name": "Target ORP",
+              "description": "Target ORP value in mV"
+            },
+            "target_ph": {
+              "name": "Target pH",
+              "description": "Target pH value"
+            },
+            "agent_volume": {
+              "name": "Agent A Volume",
+              "description": "Remaining Agent A volume in liters"
+            },
+            "heater_mode": {
+              "name": "Heater Mode",
+              "description": "Heater mode setting"
+            }
+          }
+        }
+      }
+    },
+    "ixfield_device_service_sequence": {
+      "name": "IXField Device Service Sequence",
+      "description": "Start a service sequence on an IXField device",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "The device ID to control"
+        },
+        "sequence_name": {
+          "name": "Sequence Name",
+          "description": "Name of the service sequence to start"
+        }
+      }
+    },
+    "ixfield_device_status": {
+      "name": "IXField Device Status",
+      "description": "Get comprehensive status of an IXField device",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "The device ID to get status for"
+        }
+      }
+    },
+    "ixfield_device_refresh": {
+      "name": "IXField Device Refresh",
+      "description": "Manually refresh data for an IXField device",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "The device ID to refresh"
+        }
+      }
+    },
+    "ixfield_reload_sensors": {
+      "name": "IXField Reload Sensors",
+      "description": "Reload all sensors for all IXField integrations (refresh data without rediscovery)"
+    },
+    "ixfield_reenumerate_sensors": {
+      "name": "IXField Re-enumerate Sensors",
+      "description": "Re-enumerate all sensors for all IXField integrations (rediscover all entities)"
+    },
+    "ixfield_reload_integration": {
+      "name": "IXField Reload Integration",
+      "description": "Reload a specific IXField integration",
+      "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "The config entry ID to reload"
         }
       }
     }

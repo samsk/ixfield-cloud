@@ -2,10 +2,11 @@
   "domain": "ixfield",
   "name": "IXField Cloud",
   "version": "0.1.0",
-  "documentation": "https://github.com/yourusername/ixfield-homeassistant",
-  "requirements": ["warrant", "requests", "aiohttp"],
+  "documentation": "https://github.com/samsk/ixfield-cloud",
+  "requirements": ["warrant", "requests", "aiohttp", "boto3"],
   "dependencies": [],
-  "codeowners": ["@yourusername"],
+  "codeowners": ["@samsk"],
   "config_flow": true,
-  "iot_class": "cloud_polling"
+  "iot_class": "cloud_polling",
+  "services": ["services.yaml"]
 } 

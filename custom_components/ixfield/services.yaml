@@ -1,0 +1,163 @@
+ixfield_device_control:
+  name: "IXField Device Control"
+  description: "Control all aspects of an IXField device"
+  target:
+    entity:
+      integration: ixfield
+  fields:
+    device_id:
+      name: "Device ID"
+      description: "The device ID to control"
+      required: true
+      selector:
+        text:
+    controls:
+      name: "Controls"
+      description: "Control settings to apply"
+      required: false
+      selector:
+        object:
+          fields:
+            circulation_pump:
+              name: "Circulation Pump"
+              description: "Turn circulation pump on/off"
+              selector:
+                boolean:
+            lighting:
+              name: "Lighting"
+              description: "Turn lighting on/off"
+              selector:
+                boolean:
+            counterflow:
+              name: "Counterflow"
+              description: "Turn counterflow on/off"
+              selector:
+                boolean:
+            target_temperature:
+              name: "Target Temperature"
+              description: "Target water temperature in Celsius"
+              selector:
+                number:
+                  min: 0
+                  max: 40
+                  step: 0.5
+                  unit_of_measurement: "°C"
+            target_orp:
+              name: "Target ORP"
+              description: "Target ORP value in mV"
+              selector:
+                number:
+                  min: 100
+                  max: 800
+                  step: 10
+                  unit_of_measurement: "mV"
+            target_ph:
+              name: "Target pH"
+              description: "Target pH value"
+              selector:
+                number:
+                  min: 7
+                  max: 8
+                  step: 0.05
+            agent_volume:
+              name: "Agent A Volume"
+              description: "Remaining Agent A volume in liters"
+              selector:
+                number:
+                  min: 0
+                  max: 60
+                  step: 0.1
+                  unit_of_measurement: "L"
+            heater_mode:
+              name: "Heater Mode"
+              description: "Heater mode setting"
+              selector:
+                select:
+                  options:
+                    - "HEATING"
+                    - "AUTO"
+                    - "DISABLED"
+
+ixfield_device_service_sequence:
+  name: "IXField Device Service Sequence"
+  description: "Start a service sequence on an IXField device"
+  target:
+    entity:
+      integration: ixfield
+  fields:
+    device_id:
+      name: "Device ID"
+      description: "The device ID to control"
+      required: true
+      selector:
+        text:
+    sequence_name:
+      name: "Sequence Name"
+      description: "Name of the service sequence to start"
+      required: true
+      selector:
+        select:
+          options:
+            - "dosingPumpA"
+            - "mainPumpOnly"
+            - "phProbeOnePointCalibration"
+            - "phProbeTwoPointCalibration"
+            - "orpProbeCheck"
+            - "orpProbeOffsetCalibration"
+            - "mainPumpTest"
+
+ixfield_device_status:
+  name: "IXField Device Status"
+  description: "Get comprehensive status of an IXField device"
+  target:
+    entity:
+      integration: ixfield
+  fields:
+    device_id:
+      name: "Device ID"
+      description: "The device ID to get status for"
+      required: true
+      selector:
+        text:
+
+ixfield_device_refresh:
+  name: "IXField Device Refresh"
+  description: "Manually refresh data for an IXField device"
+  target:
+    entity:
+      integration: ixfield
+  fields:
+    device_id:
+      name: "Device ID"
+      description: "The device ID to refresh"
+      required: true
+      selector:
+        text:
+
+ixfield_reload_sensors:
+  name: "IXField Reload Sensors"
+  description: "Reload all sensors for all IXField integrations (refresh data without rediscovery)"
+  target:
+    entity:
+      integration: ixfield
+
+ixfield_reenumerate_sensors:
+  name: "IXField Re-enumerate Sensors"
+  description: "Re-enumerate all sensors for all IXField integrations (rediscover all entities)"
+  target:
+    entity:
+      integration: ixfield
+
+ixfield_reload_integration:
+  name: "IXField Reload Integration"
+  description: "Reload a specific IXField integration"
+  target:
+    entity:
+      integration: ixfield
+  fields:
+    entry_id:
+      name: "Entry ID"
+      description: "The config entry ID to reload"
+      required: true
+      selector:
+        text: 
