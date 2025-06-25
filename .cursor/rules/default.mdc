@@ -1,0 +1,10 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+always use type hints
+do not remove comments, unless requested
+IMPORTANT: when moving code do not modify it, copy as is unless necessary, if something is changed mark the place with short reason comment
+IMPORTANT: when fixing tests try with fixing the test itself, if it can not be fixed giveup and request code fix
+if docker-compose.yml is present, use it to run app or tests via 'docker compose'

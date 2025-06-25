@@ -2,7 +2,9 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN, IXFIELD_DEVICE_URL
 from .sensor import generate_human_readable_name
+from .optimistic_state import OptimisticStateManager, boolean_comparison
 import logging
+import asyncio
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,44 +67,57 @@ class IxfieldSwitch(CoordinatorEntity, SwitchEntity):
         self._control_name = control.get("name")
         self._label = control.get("label", self._control_name)
         self._config = config
-        
-        # Use human-friendly name from config
         self._attr_name = config["name"]
-        
         self._attr_unique_id = f"{device_id}_{self._control_name}"
+        # Use the shared optimistic state manager
+        self._optimistic = OptimisticStateManager(self._attr_name, "Switch")
+        self._optimistic.set_entity_ref(self)
 
     @property
     def is_on(self):
+        # Get the value from coordinator data
+        device_data = self.coordinator.data.get(self._device_id, {})
+        device = device_data.get("data", {}).get("device", {})
+        value = None
+        for control in device.get("liveDeviceData", {}).get("controls", []):
+            if control.get("name") == self._control_name:
+                value = control.get("value")
+                break
+        # Use the optimistic state manager to get the current value
+        return self._optimistic.get_current_value(value in ["true", "ON", "on", "True"])
+
+    async def async_turn_on(self, **kwargs):
+        await self._async_set_switch_state(True)
+
+    async def async_turn_off(self, **kwargs):
+        await self._async_set_switch_state(False)
+
+    async def _async_set_switch_state(self, target_state):
+        api = self.coordinator.api
+        target_value = "ON" if target_state else "OFF"
+        await self._optimistic.execute_with_optimistic_update(
+            target_value=target_state,
+            api_call=lambda: api.async_set_control(self._device_id, self._control_name, target_value),
+            verification_call=self._get_actual_state,
+            value_comparison=boolean_comparison,
+            coordinator_refresh=self.coordinator.async_request_refresh
+        )
+
+    def _get_actual_state(self):
         device_data = self.coordinator.data.get(self._device_id, {})
         device = device_data.get("data", {}).get("device", {})
         for control in device.get("liveDeviceData", {}).get("controls", []):
             if control.get("name") == self._control_name:
-                return control.get("value") == "true"
+                value = control.get("value")
+                _LOGGER.debug(f"Switch {self._attr_name} actual value from coordinator: {value}")
+                return value in ["true", "ON", "on", "True"]
         return False
-
-    async def async_turn_on(self, **kwargs):
-        api = self.coordinator.api
-        success = await api.async_set_control(self._device_id, self._control_name, "true")
-        if success:
-            await self.coordinator.async_request_refresh()
-        else:
-            _LOGGER.error(f"Failed to turn ON {self._attr_name}")
-
-    async def async_turn_off(self, **kwargs):
-        api = self.coordinator.api
-        success = await api.async_set_control(self._device_id, self._control_name, "false")
-        if success:
-            await self.coordinator.async_request_refresh()
-        else:
-            _LOGGER.error(f"Failed to turn OFF {self._attr_name}")
 
     @property
     def device_info(self):
-        """Return device info."""
         device_info = self.coordinator.get_device_info(self._device_id)
         company = device_info.get("company", {})
         thing_type = device_info.get("thing_type", {})
-        
         return {
             "identifiers": {(DOMAIN, self._device_id)},
             "name": self._device_name,

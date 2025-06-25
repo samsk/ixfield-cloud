@@ -3,12 +3,14 @@ from homeassistant.components.climate.const import ClimateEntityFeature, HVACMod
 from homeassistant.const import UnitOfTemperature
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN, IXFIELD_DEVICE_URL
+from .optimistic_state import OptimisticStateManager, float_comparison_with_tolerance, string_comparison_ignore_case
 import logging
+import asyncio
 
 _LOGGER = logging.getLogger(__name__)
 
 # Import the same configuration from sensor.py
-from .sensor import SENSOR_MAPPINGS, SENSOR_MAP, get_sensor_config, generate_human_readable_name
+from .sensor import SENSOR_MAPPINGS, get_sensor_config, generate_human_readable_name
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up IXField climate entities from a config entry."""
@@ -73,14 +75,16 @@ class IxfieldClimate(CoordinatorEntity, ClimateEntity):
         self._sensor_name = sensor_name
         self._config = config
         self._mode_sensor = mode_sensor
-        
-        # Use human-friendly name from config instead of raw sensor name
         self._attr_name = config["name"]
-        
         self._attr_unique_id = f"{device_id}_{sensor_name}_climate"
         self._min_temp = config.get("min_value", 10.0)
         self._max_temp = config.get("max_value", 40.0)
         self._target_temperature_step = config.get("step", 0.5)
+        # Use the shared optimistic state manager for temperature and mode
+        self._optimistic_temp = OptimisticStateManager(self._attr_name, "ClimateTemp")
+        self._optimistic_temp.set_entity_ref(self)
+        self._optimistic_mode = OptimisticStateManager(self._attr_name, "ClimateMode")
+        self._optimistic_mode.set_entity_ref(self)
 
     @property
     def name(self):
@@ -106,17 +110,19 @@ class IxfieldClimate(CoordinatorEntity, ClimateEntity):
 
     @property
     def target_temperature(self):
+        # Get the value from coordinator data
         device_data = self.coordinator.data.get(self._device_id, {})
-        device = device_data.get("data", {}).get("device", {})
-        operating_values = device.get("liveDeviceData", {}).get("operatingValues", [])
-        for value in operating_values:
-            if value.get("name") == self._sensor_name:
-                result = value.get("desiredValue")
-                try:
-                    return float(result) if result is not None else None
-                except (TypeError, ValueError):
-                    return None
-        return None
+        value = None
+        if device_data and "data" in device_data:
+            device = device_data.get("data", {}).get("device", {})
+            for v in device.get("liveDeviceData", {}).get("operatingValues", []):
+                if v.get("name") == self._sensor_name:
+                    value = v.get("desiredValue")
+                    break
+        try:
+            return self._optimistic_temp.get_current_value(float(value) if value is not None else None)
+        except Exception:
+            return self._optimistic_temp.get_current_value(None)
 
     @property
     def min_temp(self):
@@ -132,22 +138,24 @@ class IxfieldClimate(CoordinatorEntity, ClimateEntity):
 
     @property
     def hvac_mode(self):
+        # Get the value from coordinator data
         if not self._mode_sensor:
             return HVACMode.AUTO
-            
         device_data = self.coordinator.data.get(self._device_id, {})
-        device = device_data.get("data", {}).get("device", {})
-        operating_values = device.get("liveDeviceData", {}).get("operatingValues", [])
-        for value in operating_values:
-            if value.get("name") == self._mode_sensor.get("name"):
-                mode = value.get("value")
-                if mode == "HEATING":
-                    return HVACMode.HEAT
-                elif mode == "DISABLED":
-                    return HVACMode.OFF
-                else:
-                    return HVACMode.AUTO
-        return HVACMode.AUTO
+        value = None
+        if device_data and "data" in device_data:
+            device = device_data.get("data", {}).get("device", {})
+            for v in device.get("liveDeviceData", {}).get("operatingValues", []):
+                if v.get("name") == self._mode_sensor.get("name"):
+                    value = v.get("value")
+                    break
+        # Map value to HVACMode
+        mode = HVACMode.AUTO
+        if value == "HEATING":
+            mode = HVACMode.HEAT
+        elif value == "DISABLED":
+            mode = HVACMode.OFF
+        return self._optimistic_mode.get_current_value(mode)
 
     @property
     def device_info(self):
@@ -167,33 +175,63 @@ class IxfieldClimate(CoordinatorEntity, ClimateEntity):
         }
 
     async def async_set_temperature(self, **kwargs):
-        """Set the target temperature."""
         temp = kwargs.get("temperature")
         if temp is not None:
-            # Round to nearest step increment
             step = self._target_temperature_step
             rounded_temp = round(temp / step) * step
             api = self.coordinator.api
-            success = await api.async_set_control(self._device_id, self._sensor_name, str(rounded_temp))
-            if success:
-                await self.coordinator.async_request_refresh()
-            else:
-                _LOGGER.error(f"Failed to set {self._attr_name} temperature to {rounded_temp}")
+            await self._optimistic_temp.execute_with_optimistic_update(
+                target_value=rounded_temp,
+                api_call=lambda: api.async_set_control(self._device_id, self._sensor_name, str(rounded_temp)),
+                verification_call=self._get_actual_target_temperature,
+                value_comparison=float_comparison_with_tolerance,
+                coordinator_refresh=self.coordinator.async_request_refresh
+            )
 
     async def async_set_hvac_mode(self, hvac_mode):
-        """Set the HVAC mode."""
         if not self._mode_sensor:
             return
-            
         api = self.coordinator.api
         mode_value = "AUTO"
         if hvac_mode == HVACMode.HEAT:
             mode_value = "HEATING"
         elif hvac_mode == HVACMode.OFF:
             mode_value = "DISABLED"
-        
-        success = await api.async_set_control(self._device_id, self._mode_sensor.get("name"), mode_value)
-        if success:
-            await self.coordinator.async_request_refresh()
-        else:
-            _LOGGER.error(f"Failed to set {self._attr_name} mode to {mode_value}") 
+        await self._optimistic_mode.execute_with_optimistic_update(
+            target_value=hvac_mode,
+            api_call=lambda: api.async_set_control(self._device_id, self._mode_sensor.get("name"), mode_value),
+            verification_call=self._get_actual_hvac_mode,
+            value_comparison=string_comparison_ignore_case,
+            coordinator_refresh=self.coordinator.async_request_refresh
+        )
+
+    def _get_actual_target_temperature(self):
+        device_data = self.coordinator.data.get(self._device_id, {})
+        if not device_data or "data" not in device_data:
+            return None
+        device = device_data.get("data", {}).get("device", {})
+        for v in device.get("liveDeviceData", {}).get("operatingValues", []):
+            if v.get("name") == self._sensor_name:
+                try:
+                    return float(v.get("desiredValue"))
+                except Exception:
+                    return None
+        return None
+
+    def _get_actual_hvac_mode(self):
+        if not self._mode_sensor:
+            return HVACMode.AUTO
+        device_data = self.coordinator.data.get(self._device_id, {})
+        if not device_data or "data" not in device_data:
+            return HVACMode.AUTO
+        device = device_data.get("data", {}).get("device", {})
+        for v in device.get("liveDeviceData", {}).get("operatingValues", []):
+            if v.get("name") == self._mode_sensor.get("name"):
+                value = v.get("value")
+                if value == "HEATING":
+                    return HVACMode.HEAT
+                elif value == "DISABLED":
+                    return HVACMode.OFF
+                else:
+                    return HVACMode.AUTO
+        return HVACMode.AUTO 

@@ -75,24 +75,37 @@ class IxfieldApi:
             _LOGGER.debug(f"API response data for device {device_id}: {response_data}")
             return response_data
 
-    async def async_set_control(self, device_id, control_name, value):
+    async def async_set_control(self, device_id, control_name, value, set_desired=False):
         headers = {
             "Content-Type": "application/json",
         }
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"
+        
+        # Use the correct mutation format as provided in the example
         payload = {
-            "operationName": "SetControl",
             "variables": {
-                "deviceId": device_id,
-                "name": control_name,
-                "value": value,
+                "data": {
+                    "deviceId": device_id,
+                    "name": control_name,
+                    "value": value
+                }
             },
-            "query": "mutation SetControl($deviceId: ID!, $name: String!, $value: String!) { setControl(deviceId: $deviceId, name: $name, value: $value) { success } }"
+            "query": "mutation ($data: ControlDeviceInput!) {\n  deviceControl(input: $data) {\n    success\n    __typename\n  }\n}"
         }
+        
+        _LOGGER.debug(f"Setting control {control_name} to {value} on device {device_id}")
         async with self._session.post(GRAPHQL_URL, json=payload, headers=headers) as resp:
             if resp.status != 200:
                 _LOGGER.error(f"Failed to set control {control_name} on {device_id}: {resp.status}")
+                response_text = await resp.text()
+                _LOGGER.error(f"Response body: {response_text}")
                 return False
             result = await resp.json()
-            return result.get("data", {}).get("setControl", {}).get("success", False) 
+            _LOGGER.debug(f"Control set response: {result}")
+            success = result.get("data", {}).get("deviceControl", {}).get("success", False)
+            if success:
+                _LOGGER.info(f"Successfully set control {control_name} to {value} on device {device_id}")
+            else:
+                _LOGGER.error(f"API returned failure for setting control {control_name} to {value} on device {device_id}")
+            return success 

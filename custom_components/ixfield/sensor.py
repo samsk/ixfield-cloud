@@ -1,10 +1,10 @@
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.const import UnitOfTemperature
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.helpers.entity import EntityCategory
 from .const import DOMAIN, IXFIELD_DEVICE_URL
 from .device_info_sensor import create_device_info_sensors
+from .sensor_config import should_skip_sensor_for_platform, apply_sensor_overrides
 import logging
 from datetime import datetime
 import pytz
@@ -39,50 +39,6 @@ SENSOR_MAPPINGS = {
     "VOLUME": ("L", SensorDeviceClass.VOLUME),
 }
 
-# Override configurations - can override name, unit, device_class, and settable properties
-SENSOR_MAP = {
-    # Example overrides for main sensors:
-    # "poolTempWithSettings": {
-    #     "name": "Pool Temperature",
-    #     "unit": UnitOfTemperature.CELSIUS,
-    #     "device_class": SensorDeviceClass.TEMPERATURE,
-    #     "settable": True,
-    #     "min_value": 10,
-    #     "max_value": 40,
-    #     "step": 0.5
-    # },
-    # "heaterMode": {
-    #     "name": "Heater Status",
-    #     "unit": None,
-    #     "device_class": None
-    # },
-    # "filtrationState": {
-    #     "name": "Filtration System",
-    #     "unit": None,
-    #     "device_class": None
-    # },
-    
-    # Example overrides for target sensors (use .desired suffix):
-    # "poolTempWithSettings.desired": {
-    #     "name": "Target Pool Temperature",
-    #     "settable": True,
-    #     "min_value": 10,
-    #     "max_value": 40,
-    #     "step": 0.5
-    # },
-    
-    # You can override any sensor by its exact name from the API
-    # "sensorNameFromAPI": {
-    #     "name": "Your Custom Name",
-    #     "unit": "°C",  # or UnitOfTemperature.CELSIUS
-    #     "device_class": SensorDeviceClass.TEMPERATURE,
-    #     "settable": True,  # Make it settable
-    #     "min_value": 0,
-    #     "max_value": 100,
-    #     "step": 1
-    # }
-}
-
 def generate_human_readable_name(sensor_name):
     """Generate a human readable name from sensor name."""
     # Remove common suffixes
@@ -99,10 +55,13 @@ def generate_human_readable_name(sensor_name):
     return name
 
 def get_sensor_config(sensor_name, sensor_data):
-    """Get sensor configuration with overrides from SENSOR_MAP."""
-    # Start with default configuration from sensor data
-    sensor_type = sensor_data.get("type", "STRING")
-    options = sensor_data.get("options", {})
+    """Get sensor configuration from sensor data with overrides applied."""
+    # Apply any overrides to the sensor data first
+    modified_sensor_data = apply_sensor_overrides(sensor_name, sensor_data)
+    
+    # Start with default configuration from modified sensor data
+    sensor_type = modified_sensor_data.get("type", "STRING")
+    options = modified_sensor_data.get("options", {})
     
     # Get the unit from options and map it to proper HA unit and device class
     api_unit = options.get("unit")
@@ -117,22 +76,17 @@ def get_sensor_config(sensor_name, sensor_data):
         device_class = default_config[1]
     
     config = {
-        "name": sensor_data.get("label") or generate_human_readable_name(sensor_name),
+        "name": modified_sensor_data.get("label") or generate_human_readable_name(sensor_name),
         "unit": unit,
         "device_class": device_class,
-        "settable": sensor_data.get("settable", False),
-        "show_desired": sensor_data.get("showDesired", False),
+        "settable": modified_sensor_data.get("settable", False),
+        "show_desired": modified_sensor_data.get("showDesired", False),
         "min_value": options.get("min"),
         "max_value": options.get("max"),
         "step": options.get("step", 1),
-        "value": sensor_data.get("value"),
-        "desired_value": sensor_data.get("desiredValue")
+        "value": modified_sensor_data.get("value"),
+        "desired_value": modified_sensor_data.get("desiredValue")
     }
-    
-    # Apply overrides from SENSOR_MAP
-    if sensor_name in SENSOR_MAP:
-        override = SENSOR_MAP[sensor_name]
-        config.update({k: v for k, v in override.items() if v is not None})
     
     return config
 
@@ -167,24 +121,18 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 
             config = get_sensor_config(sensor_name, sensor_data)
             
-            # Create main sensor
+            # Use global configuration to determine if this sensor should be skipped
+            if should_skip_sensor_for_platform(sensor_name, sensor_data, "sensor"):
+                _LOGGER.debug(f"Skipping sensor {sensor_name} - will be handled by other platforms")
+                continue
+            
+            # Create main sensor - for all non-settable sensors
             main_sensor = IxfieldSensor(coordinator, device_id, device_name, sensor_name, config)
             if main_sensor.unique_id not in created_unique_ids:
                 sensors.append(main_sensor)
                 created_unique_ids.add(main_sensor.unique_id)
                 all_sensor_names.append(main_sensor.name)
                 _LOGGER.debug(f"Created sensor: {main_sensor.name}")
-            
-            # Create target sensor if this is a settable sensor
-            if config.get("settable", False):
-                target_config = config.copy()
-                target_config["name"] = f"Target {config['name']}"
-                target_sensor = IxfieldSensor(coordinator, device_id, device_name, sensor_name, target_config, is_target=True)
-                if target_sensor.unique_id not in created_unique_ids:
-                    sensors.append(target_sensor)
-                    created_unique_ids.add(target_sensor.unique_id)
-                    all_sensor_names.append(target_sensor.name)
-                    _LOGGER.debug(f"Created target sensor: {target_sensor.name}")
     
     _LOGGER.info(f"Created {len(sensors)} sensors: {all_sensor_names}")
     async_add_entities(sensors)
@@ -300,67 +248,3 @@ class IxfieldSensor(CoordinatorEntity, SensorEntity):
             await self.coordinator.async_request_refresh()
         else:
             _LOGGER.error(f"Failed to set {self._attr_name} to {value}")
-
-class IxfieldSettableSensor(IxfieldSensor, NumberEntity):
-    """Representation of a settable IXField sensor."""
-
-    def __init__(self, coordinator, device_id, device_name, sensor_name, config, is_target=False):
-        # Initialize the base sensor class
-        super().__init__(coordinator, device_id, device_name, sensor_name, config, is_target)
-        self._is_target = is_target
-        
-        # Add settable-specific properties
-        self._min_value = config.get("min_value", 0)
-        self._max_value = config.get("max_value", 100)
-        self._step = config.get("step", 1)
-        
-        _LOGGER.debug(f"Initialized IxfieldSettableSensor: {self.name}, is_target: {is_target}")
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        device_data = self.coordinator.data.get(self._device_id)
-        if not device_data or "data" not in device_data:
-            _LOGGER.debug(f"No device data for {self.name}")
-            return None
-        
-        live_data = device_data.get("data", {}).get("device", {}).get("liveDeviceData", {})
-        if not live_data:
-            _LOGGER.debug(f"No live data for {self.name}")
-            return None
-        
-        operating_values = live_data.get("operatingValues", [])
-        if not operating_values:
-            _LOGGER.debug(f"No operating values for {self.name}")
-            return None
-        
-        # Find the sensor by name
-        for sensor in operating_values:
-            if sensor.get("name") == self._value_name:
-                # For target sensors, use desiredValue; for regular settable sensors, use value
-                if self._is_target:
-                    value = sensor.get("desiredValue")
-                    _LOGGER.debug(f"Target sensor {self.name} using desiredValue: {value}")
-                else:
-                    value = sensor.get("value")
-                    _LOGGER.debug(f"Regular settable sensor {self.name} using value: {value}")
-                return value
-        
-        _LOGGER.debug(f"Sensor {self._value_name} not found in operating values for {self.name}")
-        return None
-
-    @property
-    def native_min_value(self):
-        return self._min_value
-
-    @property
-    def native_max_value(self):
-        return self._max_value
-
-    @property
-    def native_step(self):
-        return self._step
-
-    @property
-    def mode(self):
-        return NumberMode.SLIDER

@@ -43,7 +43,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
         # Set up platforms
         hass.async_create_task(
-            hass.config_entries.async_forward_entry_setups(entry, ["sensor", "switch", "climate"])
+            hass.config_entries.async_forward_entry_setups(entry, ["sensor", "switch", "climate", "number", "select"])
         )
         
         return True
@@ -105,7 +105,7 @@ async def _register_devices(hass: HomeAssistant, coordinator, device_ids, config
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "switch", "climate"])
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "switch", "climate", "number", "select"])
     
     if unload_ok and DOMAIN in hass.data:
         # Clean up coordinator and session
