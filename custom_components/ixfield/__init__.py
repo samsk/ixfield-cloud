@@ -64,18 +64,44 @@ async def _register_devices(hass: HomeAssistant, coordinator, device_ids, config
             
         # Use the new naming system for device registration
         device_name = coordinator.get_device_name(device_id)
-            
+        
+        # Extract address and contact information
+        address_info = device_info.get("address", {})
+        contact_info = device_info.get("contact_info", {})
+        company_info = device_info.get("company", {})
+        thing_type_info = device_info.get("thing_type", {})
+        
+        # Build suggested area from address information
+        suggested_area = None
+        if address_info.get("city"):
+            suggested_area = address_info.get("city")
+        elif address_info.get("address"):
+            # Try to extract area from address
+            address_parts = address_info.get("address", "").split(",")
+            if len(address_parts) > 1:
+                suggested_area = address_parts[-1].strip()
+        
         # Create device registry entry with enhanced information
         device_registry.async_get_or_create(
             config_entry_id=config_entry.entry_id,
             identifiers={(DOMAIN, device_id)},
             name=device_name,
-            manufacturer=device_info.get("company", {}).get("name", "IXField"),
+            manufacturer=company_info.get("name", "IXField"),
             model=device_info.get("type", "Unknown"),
             sw_version=device_info.get("controller", "Unknown"),
-            hw_version=device_info.get("thing_type", {}).get("name", "Unknown"),
+            hw_version=thing_type_info.get("name", "Unknown"),
             configuration_url=f"{IXFIELD_DEVICE_URL}/{device_id}",
+            suggested_area=suggested_area,
+            # Add additional metadata that will be displayed in device card
+            entry_type="service",  # Indicates this is a service-based device
         )
+        
+        # Log device registration details for debugging
+        _LOGGER.info(f"Registered device {device_id} ({device_name}) with area suggestion: {suggested_area}")
+        if address_info:
+            _LOGGER.debug(f"Device {device_id} address: {address_info.get('address', 'N/A')}, {address_info.get('city', 'N/A')}, {address_info.get('postal_code', 'N/A')}")
+        if contact_info:
+            _LOGGER.debug(f"Device {device_id} contact: {contact_info.get('name', 'N/A')}, {contact_info.get('email', 'N/A')}, {contact_info.get('phone', 'N/A')}")
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload a config entry."""

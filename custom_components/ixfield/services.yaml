@@ -161,3 +161,17 @@ ixfield_reload_integration:
       required: true
       selector:
         text: 
+
+ixfield_get_device_info:
+  name: "IXField Get Device Info"
+  description: "Get comprehensive device information including address and contact details"
+  target:
+    entity:
+      integration: ixfield
+  fields:
+    device_id:
+      name: "Device ID"
+      description: "The device ID to get information for"
+      required: true
+      selector:
+        text: 

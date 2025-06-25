@@ -215,6 +215,81 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.info(f"Successfully refreshed data for device {device_id}")
         except Exception as e:
             _LOGGER.error(f"Error refreshing data for device {device_id}: {e}")
+    
+    async def get_device_info(call: ServiceCall) -> None:
+        """Get comprehensive device information including address and contact details."""
+        device_id = call.data["device_id"]
+        
+        _LOGGER.info(f"Getting comprehensive info for device {device_id}")
+        
+        # Find the coordinator for this device
+        coordinator = None
+        for entry_id, data in hass.data[DOMAIN].items():
+            coord = data["coordinator"]
+            if device_id in coord.device_ids:
+                coordinator = coord
+                break
+        
+        if not coordinator:
+            _LOGGER.error(f"Could not find coordinator for device {device_id}")
+            return
+        
+        try:
+            # Get comprehensive device information
+            device_info = coordinator.get_device_info(device_id)
+            device_name = coordinator.get_device_name(device_id)
+            
+            if not device_info:
+                _LOGGER.error(f"No device info found for {device_id}")
+                return
+            
+            # Extract and log detailed information
+            address_info = device_info.get("address", {})
+            contact_info = device_info.get("contact_info", {})
+            company_info = device_info.get("company", {})
+            
+            _LOGGER.info(f"=== Device Information for {device_name} ({device_id}) ===")
+            _LOGGER.info(f"Device Type: {device_info.get('type', 'Unknown')}")
+            _LOGGER.info(f"Controller: {device_info.get('controller', 'Unknown')}")
+            _LOGGER.info(f"Connection Status: {device_info.get('connection_status', 'Unknown')}")
+            _LOGGER.info(f"Operating Mode: {device_info.get('operating_mode', 'Unknown')}")
+            _LOGGER.info(f"In Operation Since: {device_info.get('in_operation_since', 'Unknown')}")
+            
+            if address_info:
+                _LOGGER.info(f"=== Address Information ===")
+                _LOGGER.info(f"Address: {address_info.get('address', 'N/A')}")
+                _LOGGER.info(f"City: {address_info.get('city', 'N/A')}")
+                _LOGGER.info(f"Postal Code: {address_info.get('postal_code', 'N/A')}")
+                _LOGGER.info(f"Coordinates: {address_info.get('lat', 'N/A')}, {address_info.get('lng', 'N/A')}")
+            
+            if contact_info:
+                _LOGGER.info(f"=== Contact Information ===")
+                _LOGGER.info(f"Contact Name: {contact_info.get('name', 'N/A')}")
+                _LOGGER.info(f"Contact Email: {contact_info.get('email', 'N/A')}")
+                _LOGGER.info(f"Contact Phone: {contact_info.get('phone', 'N/A')}")
+                if contact_info.get('note'):
+                    _LOGGER.info(f"Contact Note: {contact_info.get('note')}")
+            
+            if company_info:
+                _LOGGER.info(f"=== Company Information ===")
+                _LOGGER.info(f"Company: {company_info.get('name', 'N/A')}")
+                _LOGGER.info(f"Company ID: {company_info.get('id', 'N/A')}")
+            
+            # Store comprehensive info in hass.data for potential use by other components
+            if DOMAIN not in hass.data:
+                hass.data[DOMAIN] = {}
+            if "device_info" not in hass.data[DOMAIN]:
+                hass.data[DOMAIN]["device_info"] = {}
+            hass.data[DOMAIN]["device_info"][device_id] = {
+                "device_info": device_info,
+                "device_name": device_name,
+                "address_info": address_info,
+                "contact_info": contact_info,
+                "company_info": company_info
+            }
+            
+        except Exception as e:
+            _LOGGER.error(f"Error getting device info for {device_id}: {e}")
 
     async def reload_sensors(call: ServiceCall) -> None:
         """Reload all sensors for all IXField integrations."""
@@ -283,6 +358,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, "device_service_sequence", device_service_sequence)
     hass.services.async_register(DOMAIN, "device_status", device_status)
     hass.services.async_register(DOMAIN, "device_refresh", device_refresh)
+    hass.services.async_register(DOMAIN, "get_device_info", get_device_info)
     hass.services.async_register(DOMAIN, "reload_sensors", reload_sensors)
     hass.services.async_register(DOMAIN, "reenumerate_sensors", reenumerate_sensors)
     hass.services.async_register(DOMAIN, "reload_integration", reload_integration)
@@ -293,6 +369,7 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, "device_service_sequence")
     hass.services.async_remove(DOMAIN, "device_status")
     hass.services.async_remove(DOMAIN, "device_refresh")
+    hass.services.async_remove(DOMAIN, "get_device_info")
     hass.services.async_remove(DOMAIN, "reload_sensors")
     hass.services.async_remove(DOMAIN, "reenumerate_sensors")
     hass.services.async_remove(DOMAIN, "reload_integration") 

@@ -2,8 +2,12 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.const import UnitOfTemperature
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.helpers.entity import EntityCategory
 from .const import DOMAIN, IXFIELD_DEVICE_URL
+from .device_info_sensor import create_device_info_sensors
 import logging
+from datetime import datetime
+import pytz
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -152,53 +156,37 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         
         _LOGGER.debug(f"Processing {len(operating_values)} operating values for device {device_id}")
         
+        # Add device information sensors
+        sensors.extend(create_device_info_sensors(coordinator, device_id, device_name, device_info))
+        
+        # Process operating values (existing sensors)
         for sensor_data in operating_values:
             sensor_name = sensor_data.get("name")
             if not sensor_name:
                 continue
                 
             config = get_sensor_config(sensor_name, sensor_data)
-            all_sensor_names.append(sensor_name)
             
-            # Create main sensor (always shows current value, never settable)
-            main_sensor = IxfieldSensor(
-                coordinator, device_id, device_name, sensor_name, config
-            )
-            
+            # Create main sensor
+            main_sensor = IxfieldSensor(coordinator, device_id, device_name, sensor_name, config)
             if main_sensor.unique_id not in created_unique_ids:
                 sensors.append(main_sensor)
                 created_unique_ids.add(main_sensor.unique_id)
-                _LOGGER.debug(f"Created main sensor: {main_sensor.name} (regular sensor, settable: {config['settable']}, show_desired: {config['show_desired']})")
-                _LOGGER.debug(f"  - Unique ID: {main_sensor.unique_id}")
-                _LOGGER.debug(f"  - Sensor name: {sensor_name}")
-                _LOGGER.debug(f"  - Config: {config}")
-            else:
-                _LOGGER.warning(f"Duplicate sensor found: {main_sensor.name} with unique_id: {main_sensor.unique_id}")
+                all_sensor_names.append(main_sensor.name)
+                _LOGGER.debug(f"Created sensor: {main_sensor.name}")
             
-            # Create target sensor if needed (settable for desired values)
-            if config["show_desired"] and config["desired_value"] is not None:
+            # Create target sensor if this is a settable sensor
+            if config.get("settable", False):
                 target_config = config.copy()
                 target_config["name"] = f"Target {config['name']}"
-                target_config["value"] = config["desired_value"]
-                
-                # Check for specific override for target sensor
-                target_key = f"{sensor_name}.desired"
-                if target_key in SENSOR_MAP:
-                    target_config.update({k: v for k, v in SENSOR_MAP[target_key].items() if v is not None})
-                
-                # Target sensors are always settable (for setting desired values)
-                target_sensor = IxfieldSettableSensor(
-                    coordinator, device_id, device_name, sensor_name, target_config, is_target=True
-                )
-                
+                target_sensor = IxfieldSensor(coordinator, device_id, device_name, sensor_name, target_config, is_target=True)
                 if target_sensor.unique_id not in created_unique_ids:
                     sensors.append(target_sensor)
                     created_unique_ids.add(target_sensor.unique_id)
-                    _LOGGER.debug(f"Created target sensor: {target_sensor.name} (settable for desired value)")
+                    all_sensor_names.append(target_sensor.name)
+                    _LOGGER.debug(f"Created target sensor: {target_sensor.name}")
     
-    _LOGGER.info(f"Created {len(sensors)} sensors")
-    _LOGGER.debug(f"All sensor names: {all_sensor_names}")
-    _LOGGER.debug(f"Sensors being added to Home Assistant: {[s.name for s in sensors]}")
+    _LOGGER.info(f"Created {len(sensors)} sensors: {all_sensor_names}")
     async_add_entities(sensors)
 
 class IxfieldSensor(CoordinatorEntity, SensorEntity):

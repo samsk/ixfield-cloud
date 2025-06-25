@@ -155,6 +155,16 @@
         }
       }
     },
+    "ixfield_get_device_info": {
+      "name": "IXField Get Device Info",
+      "description": "Get comprehensive device information including address and contact details",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "The device ID to get information for"
+        }
+      }
+    },
     "ixfield_reload_sensors": {
       "name": "IXField Reload Sensors",
       "description": "Reload all sensors for all IXField integrations (refresh data without rediscovery)"
