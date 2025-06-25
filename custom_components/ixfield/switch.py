@@ -3,6 +3,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN, IXFIELD_DEVICE_URL
 from .sensor import generate_human_readable_name
 from .optimistic_state import OptimisticStateManager, boolean_comparison
+from .entity_helper import EntityNamingMixin, create_unique_id, EntityCommonAttrsMixin, EntityValueMixin
 import logging
 import asyncio
 
@@ -59,31 +60,29 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 switches.append(IxfieldSwitch(coordinator, device_id, device_name, control, config))
     async_add_entities(switches)
 
-class IxfieldSwitch(CoordinatorEntity, SwitchEntity):
+class IxfieldSwitch(CoordinatorEntity, SwitchEntity, EntityNamingMixin, EntityCommonAttrsMixin, EntityValueMixin):
     def __init__(self, coordinator, device_id, device_name, control, config):
         super().__init__(coordinator)
+        self.setup_entity_naming(device_name, control.get("name"), "switch", config["name"])
+        EntityCommonAttrsMixin.set_common_attrs(self, config, "switch")
         self._device_id = device_id
         self._device_name = device_name
         self._control_name = control.get("name")
         self._label = control.get("label", self._control_name)
         self._config = config
-        self._attr_name = config["name"]
-        self._attr_unique_id = f"{device_id}_{self._control_name}"
-        # Use the shared optimistic state manager
+        self._attr_unique_id = create_unique_id(device_id, self._control_name, "switch")
         self._optimistic = OptimisticStateManager(self._attr_name, "Switch")
         self._optimistic.set_entity_ref(self)
 
     @property
+    def name(self):
+        """Return the friendly name for UI display."""
+        return self._friendly_name
+
+    @property
     def is_on(self):
-        # Get the value from coordinator data
-        device_data = self.coordinator.data.get(self._device_id, {})
-        device = device_data.get("data", {}).get("device", {})
-        value = None
-        for control in device.get("liveDeviceData", {}).get("controls", []):
-            if control.get("name") == self._control_name:
-                value = control.get("value")
-                break
         # Use the optimistic state manager to get the current value
+        value = self.get_control_value(self._control_name, "value")
         return self._optimistic.get_current_value(value in ["true", "ON", "on", "True"])
 
     async def async_turn_on(self, **kwargs):
@@ -104,14 +103,9 @@ class IxfieldSwitch(CoordinatorEntity, SwitchEntity):
         )
 
     def _get_actual_state(self):
-        device_data = self.coordinator.data.get(self._device_id, {})
-        device = device_data.get("data", {}).get("device", {})
-        for control in device.get("liveDeviceData", {}).get("controls", []):
-            if control.get("name") == self._control_name:
-                value = control.get("value")
-                _LOGGER.debug(f"Switch {self._attr_name} actual value from coordinator: {value}")
-                return value in ["true", "ON", "on", "True"]
-        return False
+        value = self.get_control_value(self._control_name, "value")
+        _LOGGER.debug(f"Switch {self._attr_name} actual value from coordinator: {value}")
+        return value in ["true", "ON", "on", "True"]
 
     @property
     def device_info(self):

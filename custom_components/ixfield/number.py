@@ -6,6 +6,7 @@ from homeassistant.components.sensor import SensorDeviceClass
 from .const import DOMAIN, IXFIELD_DEVICE_URL
 from .sensor_config import should_skip_sensor_for_platform
 from .optimistic_state import OptimisticStateManager, float_comparison_with_tolerance
+from .entity_helper import EntityNamingMixin, create_unique_id, EntityCommonAttrsMixin, EntityValueMixin
 import logging
 import asyncio
 
@@ -44,14 +45,6 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             from .sensor import get_sensor_config
             config = get_sensor_config(sensor_name, sensor_data)
             
-            # Create main settable number entity
-            main_number = IxfieldNumber(coordinator, device_id, device_name, sensor_name, config)
-            if main_number.unique_id not in created_unique_ids:
-                numbers.append(main_number)
-                created_unique_ids.add(main_number.unique_id)
-                all_number_names.append(main_number.name)
-                _LOGGER.debug(f"Created number entity: {main_number.name}")
-            
             # Create additional target number entity if show_desired is True
             if config.get("show_desired", False):
                 target_config = config.copy()
@@ -61,56 +54,39 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                     numbers.append(target_number)
                     created_unique_ids.add(target_number.unique_id)
                     all_number_names.append(target_number.name)
-                    _LOGGER.debug(f"Created additional target number entity: {target_number.name}")
+                    _LOGGER.debug(f"Created target number entity: {target_number.name}")
     
     _LOGGER.info(f"Created {len(numbers)} number entities: {all_number_names}")
     async_add_entities(numbers)
 
-class IxfieldNumber(CoordinatorEntity, NumberEntity):
+class IxfieldNumber(CoordinatorEntity, NumberEntity, EntityNamingMixin, EntityCommonAttrsMixin, EntityValueMixin):
     """Representation of a settable IXField number entity."""
 
     def __init__(self, coordinator, device_id, device_name, sensor_name, config, is_target=False):
         super().__init__(coordinator)
+        self.setup_entity_naming(device_name, sensor_name, "number", config["name"], is_target)
+        EntityCommonAttrsMixin.set_common_attrs(self, config, "number")
         self._device_id = device_id
         self._device_name = device_name
         self._sensor_name = sensor_name
         self._is_target = is_target
-        
-        # Set up the entity properties
-        self._attr_name = config["name"]
-        self._attr_unique_id = f"{device_id}_{sensor_name}_target" if is_target else f"{device_id}_{sensor_name}"
-        self._attr_native_unit_of_measurement = config.get("unit")
-        self._attr_device_class = config.get("device_class")
-        
-        # Number entity specific properties
-        self._attr_native_min_value = config.get("min_value", 0)
-        self._attr_native_max_value = config.get("max_value", 100)
-        self._attr_native_step = config.get("step", 1)
-        self._attr_mode = NumberMode.SLIDER
-        
-        # Use the shared optimistic state manager
+        self._attr_unique_id = create_unique_id(device_id, sensor_name, "number", is_target)
         self._optimistic = OptimisticStateManager(self._attr_name, "Number")
         self._optimistic.set_entity_ref(self)
-        
         _LOGGER.debug(f"Initialized IxfieldNumber: {self.name}, is_target: {is_target}")
+
+    @property
+    def name(self):
+        """Return the friendly name for UI display."""
+        return self._friendly_name
 
     @property
     def native_value(self):
         """Return the current value of the number entity."""
-        # Get the value from coordinator data
-        device_data = self.coordinator.data.get(self._device_id, {})
-        value = None
-        if device_data and "data" in device_data:
-            live_data = device_data.get("data", {}).get("device", {}).get("liveDeviceData", {})
-            for sensor in live_data.get("operatingValues", []):
-                if sensor.get("name") == self._sensor_name:
-                    value = sensor.get("desiredValue") if self._is_target else sensor.get("value")
-                    break
         # Use the optimistic state manager to get the current value
-        try:
-            return self._optimistic.get_current_value(float(value) if value is not None else None)
-        except Exception:
-            return self._optimistic.get_current_value(None)
+        value_key = "desiredValue" if self._is_target else "value"
+        value = self.get_sensor_value(self._sensor_name, value_key)
+        return self._optimistic.get_current_value(value)
 
     async def async_set_native_value(self, value):
         """Set the value of the number entity."""
@@ -130,35 +106,15 @@ class IxfieldNumber(CoordinatorEntity, NumberEntity):
 
     def _get_actual_value(self):
         """Get the actual value from coordinator data without optimistic updates."""
-        device_data = self.coordinator.data.get(self._device_id, {})
-        if not device_data or "data" not in device_data:
-            return None
+        value_key = "desiredValue" if self._is_target else "value"
+        value = self.get_sensor_value(self._sensor_name, value_key)
         
-        live_data = device_data.get("data", {}).get("device", {}).get("liveDeviceData", {})
-        if not live_data:
-            return None
-        
-        operating_values = live_data.get("operatingValues", [])
-        if not operating_values:
-            return None
-        
-        # Find the sensor by name
-        for sensor in operating_values:
-            if sensor.get("name") == self._sensor_name:
-                # For target number entities, use desiredValue; for regular ones, use value
-                if self._is_target:
-                    value = sensor.get("desiredValue")
-                else:
-                    value = sensor.get("value")
-                
-                # Convert to float if possible
-                if value is not None:
-                    try:
-                        return float(value)
-                    except (TypeError, ValueError):
-                        return None
+        # Convert to float if possible
+        if value is not None:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
                 return None
-        
         return None
 
     @property

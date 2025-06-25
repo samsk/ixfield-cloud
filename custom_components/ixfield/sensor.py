@@ -5,6 +5,7 @@ from homeassistant.helpers.entity import EntityCategory
 from .const import DOMAIN, IXFIELD_DEVICE_URL
 from .device_info_sensor import create_device_info_sensors
 from .sensor_config import should_skip_sensor_for_platform, apply_sensor_overrides
+from .entity_helper import EntityNamingMixin, create_unique_id, EntityCommonAttrsMixin, EntityValueMixin
 import logging
 from datetime import datetime
 import pytz
@@ -85,7 +86,8 @@ def get_sensor_config(sensor_name, sensor_data):
         "max_value": options.get("max"),
         "step": options.get("step", 1),
         "value": modified_sensor_data.get("value"),
-        "desired_value": modified_sensor_data.get("desiredValue")
+        "desired_value": modified_sensor_data.get("desiredValue"),
+        "options": options  # Include the full options object for select entities
     }
     
     return config
@@ -137,76 +139,39 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     _LOGGER.info(f"Created {len(sensors)} sensors: {all_sensor_names}")
     async_add_entities(sensors)
 
-class IxfieldSensor(CoordinatorEntity, SensorEntity):
+class IxfieldSensor(CoordinatorEntity, SensorEntity, EntityNamingMixin, EntityCommonAttrsMixin, EntityValueMixin):
     def __init__(self, coordinator, device_id, device_name, value, meta, is_target=False):
         super().__init__(coordinator)
+        self.setup_entity_naming(device_name, value, "sensor", meta["name"], is_target)
+        EntityCommonAttrsMixin.set_common_attrs(self, meta, "sensor")
         self._device_id = device_id
         self._device_name = device_name
         self._value_name = value
         self._label = meta["name"]
-        self._unit = meta["unit"]
         self._value_key = "value"
         self._initial_value = meta.get("value")  # Store the initial value from config
-        
-        # Use human-friendly name from config instead of raw sensor name
-        if is_target:
-            # For target sensors, use the target name from config
-            self._attr_name = meta["name"]  # This should already be "Target {name}"
-        else:
-            # For main sensors, use the human-friendly name from config
-            self._attr_name = meta["name"]
-        
-        self._attr_unique_id = f"{device_id}_{self._value_name}_target" if is_target else f"{device_id}_{self._value_name}"
-        self._device_class = meta["device_class"]
+        self._attr_unique_id = create_unique_id(device_id, value, "sensor", is_target)
 
     @property
     def name(self):
-        return self._attr_name
-
-    @property
-    def unique_id(self):
-        return self._attr_unique_id
+        """Return the friendly name for UI display."""
+        return self._friendly_name
 
     @property
     def native_value(self):
-        device_data = self.coordinator.data.get(self._device_id, {})
-        _LOGGER.debug(f"Getting native_value for {self._value_name} (regular sensor) - device_id: {self._device_id}")
-        _LOGGER.debug(f"Coordinator data keys: {list(self.coordinator.data.keys())}")
-        _LOGGER.debug(f"Device data for {self._device_id}: {device_data}")
+        # Try to get value from coordinator data first
+        value = self.get_sensor_value(self._value_name, "value")
+        if value is not None:
+            return value
         
-        # The API returns {"data": {"device": {...}}}, so we need to access it properly
-        device = device_data.get("data", {}).get("device", {})
-        operating_values = device.get("liveDeviceData", {}).get("operatingValues", [])
-        
-        _LOGGER.debug(f"Available operating values: {[v.get('name') for v in operating_values]}")
-        _LOGGER.debug(f"Looking for sensor: {self._value_name}")
-
-        for sensor in operating_values:
-            if sensor.get("name") == self._value_name:
-                result = sensor.get("value")  # Always use "value" for regular sensors
-                _LOGGER.debug(f"Found value for {self._value_name}: {result}")
-                _LOGGER.debug(f"Full sensor data: {sensor}")
-                try:
-                    return float(result) if result is not None else None
-                except (TypeError, ValueError):
-                    return result  # Return as string if not numeric
-        
-        # If not found in operating values, try to use initial value from config
+        # Fallback to initial value from config
         if self._initial_value is not None:
-            _LOGGER.debug(f"Using initial value for {self._value_name}: {self._initial_value}")
             try:
                 return float(self._initial_value) if self._initial_value is not None else None
             except (TypeError, ValueError):
-                return self._initial_value  # Return as string if not numeric
+                return self._initial_value
         
-        _LOGGER.warning(f"No value found for {self._value_name}")
         return None
-
-    @property
-    def state(self):
-        """Return the state of the sensor."""
-        _LOGGER.debug(f"Getting state for {self._value_name}")
-        return self.native_value
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
@@ -214,14 +179,6 @@ class IxfieldSensor(CoordinatorEntity, SensorEntity):
         super()._handle_coordinator_update()
         # Force a state update
         self.async_write_ha_state()
-
-    @property
-    def native_unit_of_measurement(self):
-        return self._unit
-
-    @property
-    def device_class(self):
-        return self._device_class
 
     @property
     def device_info(self):
