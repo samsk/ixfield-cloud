@@ -12,3 +12,21 @@ services:
       - ./custom_components/ixfield:/config/custom_components/ixfield
     environment:
       - TZ=Europe/Bratislava
+
+  lint:
+    image: python:3.11-slim
+    container_name: ixfield-lint
+    volumes:
+      - ./custom_components:/workspace/custom_components
+      - ./requirements-dev.txt:/workspace/requirements-dev.txt
+      - ./pyproject.toml:/workspace/pyproject.toml
+      - ./setup.cfg:/workspace/setup.cfg
+    working_dir: /workspace
+    command: >
+      sh -c "
+        pip install -r requirements-dev.txt &&
+        flake8 custom_components/ &&
+        black --check --diff custom_components/ &&
+        isort --check-only --diff custom_components/ &&
+        echo 'Linting completed successfully!'
+      "

@@ -1,17 +1,27 @@
+import logging
 from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import ClimateEntityFeature, HVACMode
 from homeassistant.const import UnitOfTemperature
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
 from .const import DOMAIN, IXFIELD_DEVICE_URL
-from .optimistic_state import OptimisticStateManager, float_comparison_with_tolerance, string_comparison_ignore_case
-from .entity_helper import EntityNamingMixin, create_unique_id, EntityCommonAttrsMixin, EntityValueMixin
-import logging
-import asyncio
+from .entity_helper import (
+    EntityCommonAttrsMixin,
+    EntityNamingMixin,
+    EntityValueMixin,
+    create_unique_id,
+)
+from .optimistic_state import (
+    OptimisticStateManager,
+    float_comparison_with_tolerance,
+    string_comparison_ignore_case,
+)
+
+# Import the same configuration from sensor.py
+from .sensor import get_sensor_config
 
 _LOGGER = logging.getLogger(__name__)
 
-# Import the same configuration from sensor.py
-from .sensor import SENSOR_MAPPINGS, get_sensor_config, generate_human_readable_name
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up IXField climate entities from a config entry."""
@@ -20,67 +30,93 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     device_ids = coordinator.device_ids
     climates = []
     created_unique_ids = set()
-    
+
     for device_id in device_ids:
-        device_info = coordinator.get_device_info(device_id)
         device_name = coordinator.get_device_name(device_id)
-        _LOGGER.info(f"Processing climate entities for device {device_id}: {device_name}")
-        
+        _LOGGER.info(
+            f"Processing climate entities for device {device_id}: {device_name}"
+        )
+
         device_data = coordinator.data.get(device_id, {})
         device = device_data.get("data", {}).get("device", {})
         operating_values = device.get("liveDeviceData", {}).get("operatingValues", [])
-        
-        _LOGGER.debug(f"Processing {len(operating_values)} operating values for climate entities on device {device_id}")
-        _LOGGER.debug(f"Available operating values: {[v.get('name') for v in operating_values]}")
-        
+
+        _LOGGER.debug(
+            f"Processing {len(operating_values)} operating values for climate entities on device {device_id}"
+        )
+        _LOGGER.debug(
+            f"Available operating values: {[v.get('name') for v in operating_values]}"
+        )
+
         # Find temperature sensors that end with "WithSettings" and have Celsius units
         for sensor_data in operating_values:
             sensor_name = sensor_data.get("name")
             if not sensor_name or not sensor_name.endswith("WithSettings"):
-                _LOGGER.debug(f"Skipping sensor {sensor_name} - doesn't end with 'WithSettings'")
+                _LOGGER.debug(
+                    f"Skipping sensor {sensor_name} - doesn't end with 'WithSettings'"
+                )
                 continue
-                
+
             config = get_sensor_config(sensor_name, sensor_data)
-            _LOGGER.debug(f"Processing climate candidate: {sensor_name}, config: {config}")
-            
+            _LOGGER.debug(
+                f"Processing climate candidate: {sensor_name}, config: {config}"
+            )
+
             # Check if this is a temperature sensor with Celsius units
-            _LOGGER.debug(f"Comparing unit: config['unit'] = {config['unit']}, UnitOfTemperature.CELSIUS = {UnitOfTemperature.CELSIUS}")
+            _LOGGER.debug(
+                f"Comparing unit: config['unit'] = {config['unit']}, UnitOfTemperature.CELSIUS = {UnitOfTemperature.CELSIUS}"
+            )
             if config["unit"] != UnitOfTemperature.CELSIUS:
-                _LOGGER.debug(f"Skipping sensor {sensor_name} - unit is {config['unit']}, not Celsius")
+                _LOGGER.debug(
+                    f"Skipping sensor {sensor_name} - unit is {config['unit']}, not Celsius"
+                )
                 continue
-            
+
             # Look for corresponding mode sensor
             mode_sensor_name = sensor_name.replace("WithSettings", "Mode")
             mode_sensor = None
-            
+
             for mode_data in operating_values:
                 if mode_data.get("name") == mode_sensor_name:
                     mode_sensor = mode_data
                     break
-            
+
             if not mode_sensor:
-                _LOGGER.debug(f"No mode sensor found for {sensor_name}, looking for {mode_sensor_name}")
-            
+                _LOGGER.debug(
+                    f"No mode sensor found for {sensor_name}, looking for {mode_sensor_name}"
+                )
+
             climate_entity = IxfieldClimate(
                 coordinator, device_id, device_name, sensor_name, config, mode_sensor
             )
-            
+
             if climate_entity.unique_id not in created_unique_ids:
                 climates.append(climate_entity)
                 created_unique_ids.add(climate_entity.unique_id)
                 _LOGGER.debug(f"Created climate entity: {climate_entity.name}")
             else:
-                _LOGGER.debug(f"Climate entity {climate_entity.name} already exists, skipping")
-    
+                _LOGGER.debug(
+                    f"Climate entity {climate_entity.name} already exists, skipping"
+                )
+
     _LOGGER.info(f"Created {len(climates)} climate entities")
     async_add_entities(climates)
 
-class IxfieldClimate(CoordinatorEntity, ClimateEntity, EntityNamingMixin, EntityCommonAttrsMixin, EntityValueMixin):
+
+class IxfieldClimate(
+    CoordinatorEntity,
+    ClimateEntity,
+    EntityNamingMixin,
+    EntityCommonAttrsMixin,
+    EntityValueMixin,
+):
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.AUTO, HVACMode.OFF]
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
 
-    def __init__(self, coordinator, device_id, device_name, sensor_name, config, mode_sensor):
+    def __init__(
+        self, coordinator, device_id, device_name, sensor_name, config, mode_sensor
+    ):
         self.setup_entity_naming(device_name, sensor_name, "climate", config["name"])
         self.set_common_attrs(config, "climate")
         super().__init__(coordinator)
@@ -108,7 +144,9 @@ class IxfieldClimate(CoordinatorEntity, ClimateEntity, EntityNamingMixin, Entity
         # Get the value from coordinator data
         value = self.get_sensor_value(self._sensor_name, "desiredValue")
         try:
-            return self._optimistic_temp.get_current_value(float(value) if value is not None else None)
+            return self._optimistic_temp.get_current_value(
+                float(value) if value is not None else None
+            )
         except Exception:
             return self._optimistic_temp.get_current_value(None)
 
@@ -139,12 +177,38 @@ class IxfieldClimate(CoordinatorEntity, ClimateEntity, EntityNamingMixin, Entity
         return self._optimistic_mode.get_current_value(mode)
 
     @property
+    def hvac_action(self):
+        """Return the current HVAC action (heating, cooling, idle, etc.)."""
+        # First check if we have a specific heaterMode sensor
+        heater_mode_value = self.get_sensor_value("heaterMode", "value")
+        if heater_mode_value == "HEATING":
+            return "heating"
+
+        # Fallback to checking the mode sensor if available
+        if self._mode_sensor:
+            mode_value = self.get_sensor_value(self._mode_sensor.get("name"), "value")
+            if mode_value == "HEATING":
+                return "heating"
+
+        # Check current vs target temperature to determine if heating is needed
+        current_temp = self.current_temperature
+        target_temp = self.target_temperature
+
+        if current_temp is not None and target_temp is not None:
+            # If current temperature is below target and mode is HEAT, we're heating
+            if current_temp < target_temp and self.hvac_mode == HVACMode.HEAT:
+                return "heating"
+
+        # Default to idle if not heating
+        return "idle"
+
+    @property
     def device_info(self):
         """Return device info."""
         device_info = self.coordinator.get_device_info(self._device_id)
         company = device_info.get("company", {})
         thing_type = device_info.get("thing_type", {})
-        
+
         return {
             "identifiers": {(DOMAIN, self._device_id)},
             "name": self._device_name,
@@ -163,10 +227,12 @@ class IxfieldClimate(CoordinatorEntity, ClimateEntity, EntityNamingMixin, Entity
             api = self.coordinator.api
             await self._optimistic_temp.execute_with_optimistic_update(
                 target_value=rounded_temp,
-                api_call=lambda: api.async_set_control(self._device_id, self._sensor_name, str(rounded_temp)),
+                api_call=lambda: api.async_set_control(
+                    self._device_id, self._sensor_name, str(rounded_temp)
+                ),
                 verification_call=self._get_actual_target_temperature,
                 value_comparison=float_comparison_with_tolerance,
-                coordinator_refresh=self.coordinator.async_request_refresh
+                coordinator_refresh=self.coordinator.async_request_refresh,
             )
 
     async def async_set_hvac_mode(self, hvac_mode):
@@ -180,10 +246,12 @@ class IxfieldClimate(CoordinatorEntity, ClimateEntity, EntityNamingMixin, Entity
             mode_value = "DISABLED"
         await self._optimistic_mode.execute_with_optimistic_update(
             target_value=hvac_mode,
-            api_call=lambda: api.async_set_control(self._device_id, self._mode_sensor.get("name"), mode_value),
+            api_call=lambda: api.async_set_control(
+                self._device_id, self._mode_sensor.get("name"), mode_value
+            ),
             verification_call=self._get_actual_hvac_mode,
             value_comparison=string_comparison_ignore_case,
-            coordinator_refresh=self.coordinator.async_request_refresh
+            coordinator_refresh=self.coordinator.async_request_refresh,
         )
 
     def _get_actual_target_temperature(self):
@@ -215,4 +283,4 @@ class IxfieldClimate(CoordinatorEntity, ClimateEntity, EntityNamingMixin, Entity
                     return HVACMode.OFF
                 else:
                     return HVACMode.AUTO
-        return HVACMode.AUTO 
+        return HVACMode.AUTO

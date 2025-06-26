@@ -5,4 +5,21 @@ CONF_DEVICE_DICT = "device_dict"
 CONF_EXTRACT_DEVICE_INFO_SENSORS = "extract_device_info_sensors"
 
 # IXField URLs
-IXFIELD_DEVICE_URL = "https://www.ixfield.com/app/device" 
+IXFIELD_DEVICE_URL = "https://www.ixfield.com/app/device"
+
+# Default values
+DEFAULT_UPDATE_INTERVAL_MINUTES = 2
+DEFAULT_EXTRACT_DEVICE_INFO_SENSORS = False
+
+# API Configuration
+API_TIMEOUT = 30
+MAX_RETRIES = 3
+
+# Device types
+DEVICE_TYPE_POOL = "POOL"
+DEVICE_TYPE_SPA = "SPA"
+
+# Connection status
+CONNECTION_STATUS_ONLINE = "ONLINE"
+CONNECTION_STATUS_OFFLINE = "OFFLINE"
+CONNECTION_STATUS_UNKNOWN = "UNKNOWN"
