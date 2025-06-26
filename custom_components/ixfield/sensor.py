@@ -11,6 +11,7 @@ from .entity_helper import (
     EntityValueMixin,
     create_unique_id,
     get_operating_values,
+    create_device_info,
 )
 from .sensor_config import apply_sensor_overrides, should_skip_sensor_for_platform
 
@@ -236,19 +237,7 @@ class IxfieldSensor(
     @property
     def device_info(self):
         """Return device info."""
-        device_info = self.coordinator.get_device_info(self._device_id)
-        company = device_info.get("company", {})
-        thing_type = device_info.get("thing_type", {})
-
-        return {
-            "identifiers": {(DOMAIN, self._device_id)},
-            "name": self._device_name,
-            "manufacturer": company.get("name", "IXField"),
-            "model": device_info.get("type", "Unknown"),
-            "sw_version": device_info.get("controller", "Unknown"),
-            "hw_version": thing_type.get("name", "Unknown"),
-            "configuration_url": f"{IXFIELD_DEVICE_URL}/{self._device_id}",
-        }
+        return create_device_info(self.coordinator, self._device_id, self._device_name)
 
     async def async_set_native_value(self, value):
         """Set the value."""
@@ -327,16 +316,4 @@ class IxfieldTargetSensor(
     @property
     def device_info(self):
         """Return device info."""
-        device_info = self.coordinator.get_device_info(self._device_id)
-        company = device_info.get("company", {})
-        thing_type = device_info.get("thing_type", {})
-
-        return {
-            "identifiers": {(DOMAIN, self._device_id)},
-            "name": self._device_name,
-            "manufacturer": company.get("name", "IXField"),
-            "model": device_info.get("type", "Unknown"),
-            "sw_version": device_info.get("controller", "Unknown"),
-            "hw_version": thing_type.get("name", "Unknown"),
-            "configuration_url": f"{IXFIELD_DEVICE_URL}/{self._device_id}",
-        }
+        return create_device_info(self.coordinator, self._device_id, self._device_name)

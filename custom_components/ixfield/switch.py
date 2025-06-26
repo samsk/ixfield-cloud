@@ -9,6 +9,7 @@ from .entity_helper import (
     EntityValueMixin,
     create_unique_id,
     get_controls,
+    create_device_info,
 )
 from .optimistic_state import OptimisticStateManager, boolean_comparison
 from .sensor import generate_human_readable_name
@@ -128,15 +129,4 @@ class IxfieldSwitch(
 
     @property
     def device_info(self):
-        device_info = self.coordinator.get_device_info(self._device_id)
-        company = device_info.get("company", {})
-        thing_type = device_info.get("thing_type", {})
-        return {
-            "identifiers": {(DOMAIN, self._device_id)},
-            "name": self._device_name,
-            "manufacturer": company.get("name", "IXField"),
-            "model": device_info.get("type", "Unknown"),
-            "sw_version": device_info.get("controller", "Unknown"),
-            "hw_version": thing_type.get("name", "Unknown"),
-            "configuration_url": f"{IXFIELD_DEVICE_URL}/{self._device_id}",
-        }
+        return create_device_info(self.coordinator, self._device_id, self._device_name)

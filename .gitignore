@@ -2,7 +2,3 @@ data
 config
 
 __pycache__
-
-# temporary
-docs
-specification.md

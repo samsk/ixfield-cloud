@@ -20,6 +20,11 @@ SENSOR_OVERRIDES = {
         "show_desired_as_sensor": True,
         "reason": "Target ORP should be settable only via WEB",
     },
+    "targetpH": {
+        "settable": False,
+        "show_desired_as_sensor": True,
+        "reason": "Target PH should be settable only via WEB",
+    },
     # Example of overriding other sensor properties:
     # "poolTempWithSettings": {
     #     "name": "Pool Temperature",  # Override the display name

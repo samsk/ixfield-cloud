@@ -71,6 +71,77 @@ def get_controls(coordinator, device_id: str) -> list:
     return controls
 
 
+def create_device_info(coordinator, device_id: str, device_name: str):
+    """
+    Create standardized device info dictionary for all IXField entities.
+    
+    Args:
+        coordinator: The IXField coordinator
+        device_id: The device ID
+        device_name: The device name
+        
+    Returns:
+        Device info dictionary
+    """
+    from .const import DOMAIN, IXFIELD_DEVICE_URL
+    
+    device_info = coordinator.get_device_info(device_id)
+    company = device_info.get("company", {})
+    thing_type = device_info.get("thing_type", {})
+    
+    return {
+        "identifiers": {(DOMAIN, device_id)},
+        "name": device_name,
+        "manufacturer": company.get("name", "IXField"),
+        "model": device_info.get("type", "Unknown"),
+        "sw_version": device_info.get("controller", "Unknown"),
+        "hw_version": thing_type.get("name", "Unknown"),
+        "configuration_url": f"{IXFIELD_DEVICE_URL}/{device_id}",
+    }
+
+
+def setup_entity_common(
+    entity,
+    coordinator,
+    device_id: str,
+    device_name: str,
+    sensor_name: str,
+    platform: str,
+    config: dict,
+    unique_id_suffix: str = None,
+):
+    """
+    Setup common entity attributes and properties.
+    
+    Args:
+        entity: The entity instance
+        coordinator: The IXField coordinator
+        device_id: The device ID
+        device_name: The device name
+        sensor_name: The sensor/control name
+        platform: The platform type
+        config: The entity configuration
+        unique_id_suffix: Optional suffix for unique ID
+    """
+    # Setup entity naming
+    entity.setup_entity_naming(device_name, sensor_name, platform, config["name"])
+    
+    # Setup common attributes
+    entity.set_common_attrs(config, platform)
+    
+    # Store common properties
+    entity._device_id = device_id
+    entity._device_name = device_name
+    entity._sensor_name = sensor_name
+    entity._config = config
+    
+    # Create unique ID
+    unique_id = create_unique_id(device_id, sensor_name, platform)
+    if unique_id_suffix:
+        unique_id = f"{unique_id}_{unique_id_suffix}"
+    entity._attr_unique_id = unique_id
+
+
 class EntityNamingMixin:
     """Mixin class to provide standardized entity naming for IXField entities."""
 
@@ -223,3 +294,52 @@ class EntityValueMixin:
                 return value
 
         return fallback_value
+
+
+class BaseIxfieldEntity:
+    """Base class for IXField entities with common functionality."""
+    
+    def __init__(
+        self,
+        coordinator,
+        device_id: str,
+        device_name: str,
+        sensor_name: str,
+        platform: str,
+        config: dict,
+        unique_id_suffix: str = None,
+    ):
+        """
+        Initialize the base entity with common properties.
+        
+        Args:
+            coordinator: The IXField coordinator
+            device_id: The device ID
+            device_name: The device name
+            sensor_name: The sensor/control name
+            platform: The platform type
+            config: The entity configuration
+            unique_id_suffix: Optional suffix for unique ID
+        """
+        # Setup entity naming
+        self.setup_entity_naming(device_name, sensor_name, platform, config["name"])
+        
+        # Setup common attributes
+        self.set_common_attrs(config, platform)
+        
+        # Store common properties
+        self._device_id = device_id
+        self._device_name = device_name
+        self._sensor_name = sensor_name
+        self._config = config
+        
+        # Create unique ID
+        unique_id = create_unique_id(device_id, sensor_name, platform)
+        if unique_id_suffix:
+            unique_id = f"{unique_id}_{unique_id_suffix}"
+        self._attr_unique_id = unique_id
+    
+    @property
+    def device_info(self):
+        """Return device info."""
+        return create_device_info(self.coordinator, self._device_id, self._device_name)
