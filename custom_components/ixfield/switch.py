@@ -62,22 +62,18 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
 class IxfieldSwitch(CoordinatorEntity, SwitchEntity, EntityNamingMixin, EntityCommonAttrsMixin, EntityValueMixin):
     def __init__(self, coordinator, device_id, device_name, control, config):
-        super().__init__(coordinator)
         self.setup_entity_naming(device_name, control.get("name"), "switch", config["name"])
-        EntityCommonAttrsMixin.set_common_attrs(self, config, "switch")
+        self.set_common_attrs(config, "switch")
+        super().__init__(coordinator)
+
         self._device_id = device_id
         self._device_name = device_name
         self._control_name = control.get("name")
         self._label = control.get("label", self._control_name)
         self._config = config
         self._attr_unique_id = create_unique_id(device_id, self._control_name, "switch")
-        self._optimistic = OptimisticStateManager(self._attr_name, "Switch")
+        self._optimistic = OptimisticStateManager(self.name, "Switch")
         self._optimistic.set_entity_ref(self)
-
-    @property
-    def name(self):
-        """Return the friendly name for UI display."""
-        return self._friendly_name
 
     @property
     def is_on(self):

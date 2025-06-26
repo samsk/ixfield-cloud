@@ -63,22 +63,18 @@ class IxfieldNumber(CoordinatorEntity, NumberEntity, EntityNamingMixin, EntityCo
     """Representation of a settable IXField number entity."""
 
     def __init__(self, coordinator, device_id, device_name, sensor_name, config, is_target=False):
-        super().__init__(coordinator)
         self.setup_entity_naming(device_name, sensor_name, "number", config["name"], is_target)
-        EntityCommonAttrsMixin.set_common_attrs(self, config, "number")
+        self.set_common_attrs(config, "number")
+        super().__init__(coordinator)
+
         self._device_id = device_id
         self._device_name = device_name
         self._sensor_name = sensor_name
         self._is_target = is_target
         self._attr_unique_id = create_unique_id(device_id, sensor_name, "number", is_target)
-        self._optimistic = OptimisticStateManager(self._attr_name, "Number")
+        self._optimistic = OptimisticStateManager(self.name, "Number")
         self._optimistic.set_entity_ref(self)
         _LOGGER.debug(f"Initialized IxfieldNumber: {self.name}, is_target: {is_target}")
-
-    @property
-    def name(self):
-        """Return the friendly name for UI display."""
-        return self._friendly_name
 
     @property
     def native_value(self):

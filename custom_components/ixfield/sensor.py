@@ -77,6 +77,7 @@ def get_sensor_config(sensor_name, sensor_data):
         device_class = default_config[1]
     
     config = {
+        "_name": sensor_name,
         "name": modified_sensor_data.get("label") or generate_human_readable_name(sensor_name),
         "unit": unit,
         "device_class": device_class,
@@ -140,22 +141,18 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     async_add_entities(sensors)
 
 class IxfieldSensor(CoordinatorEntity, SensorEntity, EntityNamingMixin, EntityCommonAttrsMixin, EntityValueMixin):
-    def __init__(self, coordinator, device_id, device_name, value, meta, is_target=False):
+    def __init__(self, coordinator, device_id, device_name, value, config, is_target=False):
+        self.setup_entity_naming(device_name, value, "sensor", config["name"], is_target)
+        self.set_common_attrs(config, "sensor")
         super().__init__(coordinator)
-        self.setup_entity_naming(device_name, value, "sensor", meta["name"], is_target)
-        EntityCommonAttrsMixin.set_common_attrs(self, meta, "sensor")
+        
         self._device_id = device_id
         self._device_name = device_name
         self._value_name = value
-        self._label = meta["name"]
+        self._label = config["name"]
         self._value_key = "value"
-        self._initial_value = meta.get("value")  # Store the initial value from config
+        self._initial_value = config.get("value")  # Store the initial value from config
         self._attr_unique_id = create_unique_id(device_id, value, "sensor", is_target)
-
-    @property
-    def name(self):
-        """Return the friendly name for UI display."""
-        return self._friendly_name
 
     @property
     def native_value(self):

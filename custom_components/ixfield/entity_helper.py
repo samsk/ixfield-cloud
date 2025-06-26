@@ -1,35 +1,8 @@
 """Common entity naming utilities for IXField integration."""
 
-def create_entity_name(device_name: str, sensor_name: str, platform: str, is_target: bool = False) -> str:
-    """
-    Create a standardized entity name with device prefix.
-    
-    Args:
-        device_name: The device name (e.g., "pool", "pool1")
-        sensor_name: The sensor/control name from API
-        platform: The platform type ("sensor", "climate", "select", "number", "switch")
-        is_target: Whether this is a target entity (for number platform)
-    
-    Returns:
-        Entity name with device prefix (e.g., "pool_temperature", "pool1_ph_select")
-    """
-    # Base entity name with device prefix
-    entity_name = f"{device_name}_{sensor_name}"
-    
-    # Add platform-specific suffix
-    if platform == "climate":
-        entity_name = f"{entity_name}_climate"
-    elif platform == "select":
-        entity_name = f"{entity_name}_select"
-    elif platform == "number":
-        entity_name = f"{entity_name}_number"
-        if is_target:
-            entity_name = f"{entity_name}_target"
-    elif platform == "switch":
-        entity_name = f"{entity_name}_switch"
-    # sensor platform doesn't need suffix
-    
-    return entity_name
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def create_unique_id(device_id: str, sensor_name: str, platform: str, is_target: bool = False) -> str:
@@ -59,25 +32,30 @@ class EntityNamingMixin:
     
     def setup_entity_naming(self, device_name: str, sensor_name: str, platform: str, friendly_name: str, is_target: bool = False):
         """
-        Setup entity naming.
+        Setup entity naming using the new Home Assistant entity naming convention.
+        
+        This method implements the new Home Assistant entity naming standard:
+        - Sets has_entity_name = True
+        - Stores the friendly name for the name property
+        - The name property will return only the data point name
+        - Home Assistant automatically generates friendly_name by combining entity name with device name
         
         Args:
             device_name: The device name
             sensor_name: The sensor/control name from API
             platform: The platform type
-            friendly_name: Human-friendly name for UI display
+            friendly_name: Human-friendly name for UI display (data point name only)
             is_target: Whether this is a target entity
         """
-        # Create entity name with device prefix for entity_id generation
-        entity_name = create_entity_name(device_name, sensor_name, platform, is_target)
-        self._attr_name = entity_name
+        # Set has_entity_name to True for new Home Assistant naming convention
+        self._attr_has_entity_name = True
+        self._attr_name = friendly_name
         
-        # Store human-friendly name for UI display
-        self._friendly_name = friendly_name
-        
-        # Set has_entity_name to False so we can control the display name
-        self._attr_has_entity_name = False
-
+        # Store additional info for backward compatibility if needed
+        self._device_name = device_name
+        self._sensor_name = sensor_name
+        self._platform = platform
+        self._is_target = is_target
 
 class EntityCommonAttrsMixin:
     """Mixin to set common Home Assistant entity attributes from config/meta."""
@@ -91,13 +69,25 @@ class EntityCommonAttrsMixin:
         
         # Handle options based on platform
         if "options" in config and config["options"]:
-            options = config["options"].get("options", [])
             if platform == "select":
-                # For select entities, set the options
-                self._attr_options = options
-            elif platform == "sensor" and options:
+                # For select entities, extract options from options.values array
+                # Each item has 'value' and 'label' attributes
+                values = config["options"].get("values", [])
+                if values:
+                    # Extract the 'value' from each option for Home Assistant select
+                    self._attr_options = [item.get("value", "") for item in values if item.get("value")]
+                    _LOGGER.debug(f"Extracted select options from values: {self._attr_options}")
+                else:
+                    # Fallback to old format if values not found
+                    options = config["options"].get("options", [])
+                    self._attr_options = options
+                    _LOGGER.debug(f"Using fallback select options: {self._attr_options}")
+            elif platform == "sensor":
                 # For sensors with options, set enum device class
-                self._attr_device_class = "enum"
+                values = config["options"].get("values", [])
+                options = config["options"].get("options", [])
+                if values or options:
+                    self._attr_device_class = "enum"
         
         # Min/max/step/mode (for number)
         if "min_value" in config:

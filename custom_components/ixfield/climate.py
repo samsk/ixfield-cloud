@@ -81,9 +81,10 @@ class IxfieldClimate(CoordinatorEntity, ClimateEntity, EntityNamingMixin, Entity
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
 
     def __init__(self, coordinator, device_id, device_name, sensor_name, config, mode_sensor):
-        super().__init__(coordinator)
         self.setup_entity_naming(device_name, sensor_name, "climate", config["name"])
-        EntityCommonAttrsMixin.set_common_attrs(self, config, "climate")
+        self.set_common_attrs(config, "climate")
+        super().__init__(coordinator)
+
         self._device_id = device_id
         self._device_name = device_name
         self._sensor_name = sensor_name
@@ -93,15 +94,10 @@ class IxfieldClimate(CoordinatorEntity, ClimateEntity, EntityNamingMixin, Entity
         self._min_temp = config.get("min_value", 10.0)
         self._max_temp = config.get("max_value", 40.0)
         self._target_temperature_step = config.get("step", 0.5)
-        self._optimistic_temp = OptimisticStateManager(self._attr_name, "ClimateTemp")
+        self._optimistic_temp = OptimisticStateManager(self.name, "ClimateTemp")
         self._optimistic_temp.set_entity_ref(self)
-        self._optimistic_mode = OptimisticStateManager(self._attr_name, "ClimateMode")
+        self._optimistic_mode = OptimisticStateManager(self.name, "ClimateMode")
         self._optimistic_mode.set_entity_ref(self)
-
-    @property
-    def name(self):
-        """Return the friendly name for UI display."""
-        return self._friendly_name
 
     @property
     def current_temperature(self):

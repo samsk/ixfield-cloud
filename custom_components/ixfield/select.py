@@ -58,22 +58,18 @@ class IxfieldSelect(CoordinatorEntity, SelectEntity, EntityNamingMixin, EntityCo
     """Representation of a settable IXField select entity."""
 
     def __init__(self, coordinator, device_id, device_name, sensor_name, config):
-        super().__init__(coordinator)
         self.setup_entity_naming(device_name, sensor_name, "select", config["name"])
-        EntityCommonAttrsMixin.set_common_attrs(self, config, "select")
+        self.set_common_attrs(config, "select")
+        super().__init__(coordinator)
+
         self._device_id = device_id
         self._device_name = device_name
         self._sensor_name = sensor_name
         self._attr_unique_id = create_unique_id(device_id, sensor_name, "select")
         self._attr_current_option = None
-        self._optimistic = OptimisticStateManager(self._attr_name, "Select")
+        self._optimistic = OptimisticStateManager(self.name, "Select")
         self._optimistic.set_entity_ref(self)
         _LOGGER.debug(f"Initialized IxfieldSelect: {self.name} with options: {self._attr_options}")
-
-    @property
-    def name(self):
-        """Return the friendly name for UI display."""
-        return self._friendly_name
 
     @property
     def current_option(self):
