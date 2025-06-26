@@ -8,5 +8,6 @@
   "codeowners": ["@samsk"],
   "config_flow": true,
   "iot_class": "cloud_polling",
-  "services": ["services.yaml"]
+  "services": ["services.yaml"],
+  "icon": "icon.png"
 } 
