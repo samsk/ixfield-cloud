@@ -7,7 +7,7 @@ import json
 _LOGGER = logging.getLogger(__name__)
 
 class IxfieldCoordinator(DataUpdateCoordinator):
-    def __init__(self, hass: HomeAssistant, api, device_ids, update_interval=timedelta(minutes=2), device_names_config=""):
+    def __init__(self, hass: HomeAssistant, api, device_dict, update_interval=timedelta(minutes=2), extract_device_info_sensors=True):
         super().__init__(
             hass,
             _LOGGER,
@@ -15,29 +15,26 @@ class IxfieldCoordinator(DataUpdateCoordinator):
             update_interval=update_interval,
         )
         self.api = api
-        self.device_ids = device_ids
+        self.device_dict = device_dict
+        self.device_ids = list(device_dict.keys())
         self._device_info = {}
         self._device_names = {}
-        self._device_names_config = device_names_config
+        self._extract_device_info_sensors = extract_device_info_sensors
         self._construct_device_names()
 
     def _construct_device_names(self):
-        """Construct device names based on type and user configuration."""
-        # Parse user-defined device names
-        user_names = {}
-        if self._device_names_config:
-            try:
-                user_names = json.loads(self._device_names_config)
-            except json.JSONDecodeError:
-                _LOGGER.warning("Invalid device names configuration JSON, ignoring")
-        
-        # If device info is not yet available, use device IDs as fallback
+        """Construct device names based on device dictionary and type."""
+        # If device info is not yet available, use device dictionary as fallback
         if not self._device_info:
-            for device_id in self.device_ids:
-                if device_id in user_names:
-                    self._device_names[device_id] = user_names[device_id]
+            for device_id, device_data in self.device_dict.items():
+                # Use custom name if available, otherwise use device name
+                custom_name = device_data.get("custom_name")
+                device_name = device_data.get("name", device_id)
+                
+                if custom_name:
+                    self._device_names[device_id] = custom_name
                 else:
-                    self._device_names[device_id] = device_id
+                    self._device_names[device_id] = device_name
             _LOGGER.debug(f"Constructed device names (fallback): {self._device_names}")
             return
         
@@ -58,9 +55,12 @@ class IxfieldCoordinator(DataUpdateCoordinator):
         
         # Second pass: construct names
         for device_id in self.device_ids:
-            # Check if user has defined a custom name
-            if device_id in user_names:
-                self._device_names[device_id] = user_names[device_id]
+            # Check if device has custom name in device dictionary
+            device_data = self.device_dict.get(device_id, {})
+            custom_name = device_data.get("custom_name")
+            
+            if custom_name:
+                self._device_names[device_id] = custom_name
                 continue
             
             device_info = self._device_info.get(device_id, {})
@@ -150,6 +150,10 @@ class IxfieldCoordinator(DataUpdateCoordinator):
             # For entity types, use device_name_entity_type format
             return f"{device_name}_{entity_type}"
 
+    def should_extract_device_info_sensors(self):
+        """Check if device info sensors should be extracted."""
+        return self._extract_device_info_sensors
+
     def _extract_device_info(self, device_data, device_id):
         """Extract device information from API response."""
         if not device_data or "data" not in device_data:
@@ -177,15 +181,6 @@ class IxfieldCoordinator(DataUpdateCoordinator):
             "need_propagate_device_data": device.get("needPropagateDeviceData"),
             "grafana_link": device.get("grafanaLink"),
         }
-        
-        # Extract thing type information
-        thing_type = device.get("thingType", {})
-        if thing_type:
-            device_info["thing_type"] = {
-                "name": thing_type.get("name"),
-                "business_name": thing_type.get("businessName"),
-                "family": thing_type.get("thingTypeFamily", {}).get("name") if thing_type.get("thingTypeFamily") else None
-            }
         
         # Extract address information
         address = device.get("address", {})
@@ -222,32 +217,15 @@ class IxfieldCoordinator(DataUpdateCoordinator):
                 "uses_new_eligibility_system": company.get("usesNewEligibilitySystem"),
             }
         
-        # Extract live device data summary
-        live_data = device.get("liveDeviceData", {})
-        if live_data:
-            device_info["live_data_summary"] = {
-                "running_service_sequence": live_data.get("runningServiceSequence", {}).get("name") if live_data.get("runningServiceSequence") else None,
-                "operating_values_count": len(live_data.get("operatingValues", [])),
-                "controls_count": len(live_data.get("controls", [])),
-                "service_sequences_count": len(live_data.get("serviceSequences", [])),
-                "tabs_count": len(live_data.get("tabs", [])),
-                "event_detection_points_count": len(live_data.get("eventDetectionPoints", [])),
-                "user_access_count": len(live_data.get("userAccess", [])),
-                "eligibilities_count": len(live_data.get("eligibilities", [])),
+        # Extract thing type information
+        thing_type = device.get("thingType", {})
+        if thing_type:
+            device_info["thing_type"] = {
+                "name": thing_type.get("name"),
+                "business_name": thing_type.get("businessName"),
+                "family": thing_type.get("thingTypeFamily", {}).get("name") if thing_type.get("thingTypeFamily") else None,
             }
         
-        # Extract user access information
-        user_access = live_data.get("userAccess", [])
-        if user_access:
-            device_info["user_access"] = []
-            for access in user_access:
-                device_info["user_access"].append({
-                    "id": access.get("id"),
-                    "custom_device_name": access.get("customDeviceName"),
-                    "type": access.get("type"),
-                })
-        
-        _LOGGER.debug(f"Extracted device info for {device_id}: {device_info}")
         return device_info
 
     async def _async_update_data(self):

@@ -1,20 +1,30 @@
-DOMAIN = "ixfield"
-
+"""The IXField Cloud integration."""
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.typing import ConfigType
+from homeassistant.const import Platform
+from .const import DOMAIN, CONF_DEVICE_DICT, CONF_EXTRACT_DEVICE_INFO_SENSORS
 from .coordinator import IxfieldCoordinator
 from .services import async_setup_services, async_unload_services
-from .const import CONF_EMAIL, CONF_PASSWORD, CONF_DEVICES, CONF_DEVICE_NAMES, IXFIELD_DEVICE_URL
 import logging
 
 _LOGGER = logging.getLogger(__name__)
 
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.CLIMATE,
+    Platform.NUMBER,
+    Platform.SELECT,
+]
+
 async def async_setup(hass, config):
-    """Set up the ixfield component."""
+    """Set up the IXField Cloud component."""
+    hass.data.setdefault(DOMAIN, {})
+    
     # Set up services
     await async_setup_services(hass)
-    return True 
+    
+    return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up ixfield from a config entry."""
@@ -22,16 +32,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     import aiohttp
 
     try:
-        email = entry.data[CONF_EMAIL]
-        password = entry.data[CONF_PASSWORD]
-        device_ids = [d.strip() for d in entry.data[CONF_DEVICES].split(",") if d.strip()]
-        device_names_config = entry.data.get(CONF_DEVICE_NAMES, "")
+        email = entry.data["email"]
+        password = entry.data["password"]
+        device_dict = entry.data[CONF_DEVICE_DICT]
+        extract_device_info_sensors = entry.data.get(CONF_EXTRACT_DEVICE_INFO_SENSORS, True)
         
         session = aiohttp.ClientSession()
         api = IxfieldApi(email, password, session)
         await api.async_login()
         
-        coordinator = IxfieldCoordinator(hass, api, device_ids, device_names_config=device_names_config)
+        coordinator = IxfieldCoordinator(hass, api, device_dict, extract_device_info_sensors=extract_device_info_sensors)
         await coordinator.async_config_entry_first_refresh()
 
         if DOMAIN not in hass.data:
@@ -39,7 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         hass.data[DOMAIN][entry.entry_id] = {"coordinator": coordinator}
 
         # Register devices in device registry
-        await _register_devices(hass, coordinator, device_ids, entry)
+        await _register_devices(hass, coordinator, device_dict, entry)
 
         # Set up platforms
         hass.async_create_task(
@@ -51,13 +61,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         _LOGGER.error(f"Failed to set up IXField integration: {ex}")
         return False
 
-async def _register_devices(hass: HomeAssistant, coordinator, device_ids, config_entry):
+async def _register_devices(hass: HomeAssistant, coordinator, device_dict, config_entry):
     """Register devices in Home Assistant's device registry."""
     from homeassistant.helpers.device_registry import async_get as async_get_device_registry
     
     device_registry = async_get_device_registry(hass)
     
-    for device_id in device_ids:
+    for device_id, device_data in device_dict.items():
         device_info = coordinator.get_device_info(device_id)
         if not device_info:
             continue
@@ -81,7 +91,7 @@ async def _register_devices(hass: HomeAssistant, coordinator, device_ids, config
             if len(address_parts) > 1:
                 suggested_area = address_parts[-1].strip()
         
-        # Create device registry entry with enhanced information
+        # Create device entry
         device_registry.async_get_or_create(
             config_entry_id=config_entry.entry_id,
             identifiers={(DOMAIN, device_id)},
@@ -90,10 +100,8 @@ async def _register_devices(hass: HomeAssistant, coordinator, device_ids, config
             model=device_info.get("type", "Unknown"),
             sw_version=device_info.get("controller", "Unknown"),
             hw_version=thing_type_info.get("name", "Unknown"),
-            configuration_url=f"{IXFIELD_DEVICE_URL}/{device_id}",
+            configuration_url=f"https://www.ixfield.com/app/device/{device_id}",
             suggested_area=suggested_area,
-            # Add additional metadata that will be displayed in device card
-            entry_type="service",  # Indicates this is a service-based device
         )
         
         # Log device registration details for debugging

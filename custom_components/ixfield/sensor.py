@@ -113,8 +113,12 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         
         _LOGGER.debug(f"Processing {len(operating_values)} operating values for device {device_id}")
         
-        # Add device information sensors
-        sensors.extend(create_device_info_sensors(coordinator, device_id, device_name, device_info))
+        # Add device information sensors only if enabled
+        if coordinator.should_extract_device_info_sensors():
+            sensors.extend(create_device_info_sensors(coordinator, device_id, device_name, device_info))
+            _LOGGER.debug(f"Created device info sensors for device {device_id}")
+        else:
+            _LOGGER.debug(f"Skipping device info sensors for device {device_id} - disabled in configuration")
         
         # Process operating values (existing sensors)
         for sensor_data in operating_values:

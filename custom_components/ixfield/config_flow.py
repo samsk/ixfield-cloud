@@ -3,7 +3,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-from .const import DOMAIN, CONF_DEVICES, CONF_DEVICE_NAMES
+from .const import DOMAIN, CONF_DEVICE_DICT, CONF_EXTRACT_DEVICE_INFO_SENSORS
 from .api import IxfieldApi
 import aiohttp
 import logging
@@ -20,78 +20,81 @@ class IxfieldConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         self._email = None
         self._password = None
-        self._devices = None
-        self._device_names = None
+        self._extract_device_info_sensors = None
 
     async def async_step_user(self, user_input=None) -> FlowResult:
-        """Handle the initial step."""
+        """Handle the initial step - credentials and device discovery."""
         errors = {}
 
         if user_input is not None:
             self._email = user_input[CONF_EMAIL]
             self._password = user_input[CONF_PASSWORD]
-            self._devices = user_input[CONF_DEVICES]
-            self._device_names = user_input.get(CONF_DEVICE_NAMES, "")
+            self._extract_device_info_sensors = user_input.get(CONF_EXTRACT_DEVICE_INFO_SENSORS, True)
 
             # Check if already configured
             await self.async_set_unique_id(self._email)
             self._abort_if_unique_id_configured()
 
-            # Validate credentials and get device information
+            # Validate credentials and get available devices
             session = None
             try:
                 session = aiohttp.ClientSession()
                 api = IxfieldApi(self._email, self._password, session)
                 await api.async_login()
                 
-                # Parse device IDs and validate them
-                device_ids = [d.strip() for d in self._devices.split(",") if d.strip()]
-                if not device_ids:
-                    errors["base"] = "no_devices"
+                # Get available devices
+                devices_response = await api.async_get_user_devices()
+                if devices_response is None:
+                    errors["base"] = "failed_to_fetch_devices"
                     return self.async_show_form(
                         step_id="user",
                         data_schema=self._get_data_schema(),
                         errors=errors
                     )
                 
-                # Test access to devices and get their types
-                device_types = {}
-                for device_id in device_ids:
-                    try:
-                        device_data = await api.async_get_device(device_id)
-                        if device_data and "data" in device_data and "device" in device_data["data"]:
-                            device_type = device_data["data"]["device"].get("type", "Unknown")
-                            device_types[device_id] = device_type
-                        else:
-                            errors["base"] = f"invalid_device_{device_id}"
-                            return self.async_show_form(
-                                step_id="user",
-                                data_schema=self._get_data_schema(),
-                                errors=errors
-                            )
-                    except Exception as e:
-                        _LOGGER.error(f"Error accessing device {device_id}: {e}")
-                        errors["base"] = f"device_access_error_{device_id}"
-                        return self.async_show_form(
-                            step_id="user",
-                            data_schema=self._get_data_schema(),
-                            errors=errors
-                        )
+                # Extract devices from response
+                devices_data = devices_response.get("data", {}).get("me", {}).get("devices", [])
+                if not devices_data:
+                    errors["base"] = "no_devices_found"
+                    return self.async_show_form(
+                        step_id="user",
+                        data_schema=self._get_data_schema(),
+                        errors=errors
+                    )
                 
-                # If we get here, credentials and devices are valid
+                await session.close()
+                
+                # Create device dictionary with all discovered devices
+                device_dict = {}
+                for device in devices_data:
+                    device_id = device.get("id")
+                    if device_id:
+                        device_dict[device_id] = {
+                            "id": device_id,
+                            "name": device.get("name", "Unknown Device"),
+                            "custom_name": device.get("customName"),
+                            "connection_status": device.get("connectionStatus", "Unknown"),
+                            "controller": device.get("controller"),
+                            "operating_mode": device.get("operatingMode"),
+                            "connection_status_changed_time": device.get("connectionStatusChangedTime"),
+                            "company": device.get("company", {}),
+                            "connection_type": device.get("connectionType", {}).get("formattedValue", "Unknown")
+                        }
+
+                # Create the config entry
                 return self.async_create_entry(
                     title=f"IXField Cloud ({self._email})",
                     data={
                         CONF_EMAIL: self._email,
                         CONF_PASSWORD: self._password,
-                        CONF_DEVICES: self._devices,
-                        CONF_DEVICE_NAMES: self._device_names,
+                        CONF_DEVICE_DICT: device_dict,
+                        CONF_EXTRACT_DEVICE_INFO_SENSORS: self._extract_device_info_sensors,
                     }
                 )
+                
             except Exception as ex:
                 _LOGGER.error(f"Authentication failed: {ex}")
                 errors["base"] = "invalid_auth"
-            finally:
                 if session:
                     await session.close()
 
@@ -100,9 +103,7 @@ class IxfieldConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=self._get_data_schema(),
             errors=errors,
             description_placeholders={
-                "docs_url": "https://github.com/yourusername/ixfield-homeassistant",
-                "devices_help": "Comma-separated device IDs",
-                "names_help": "Optional JSON mapping of device IDs to custom names (e.g., {\"device1\": \"Pool Controller\", \"device2\": \"Garden System\"})"
+                "docs_url": "https://github.com/yourusername/ixfield-homeassistant"
             }
         )
 
@@ -111,23 +112,21 @@ class IxfieldConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return vol.Schema({
             vol.Required(CONF_EMAIL): str,
             vol.Required(CONF_PASSWORD): str,
-            vol.Required(CONF_DEVICES): str,
-            vol.Optional(CONF_DEVICE_NAMES, default=""): str,
+            vol.Optional(CONF_EXTRACT_DEVICE_INFO_SENSORS, default=True): bool,
         })
 
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
         """Get the options flow for this handler."""
-        return IxfieldOptionsFlow(config_entry)
+        return IxfieldOptionsFlow()
 
 
 class IxfieldOptionsFlow(config_entries.OptionsFlow):
     """Handle IXField options."""
 
-    def __init__(self, config_entry):
+    def __init__(self):
         """Initialize options flow."""
-        self.config_entry = config_entry
         self._reload_result = None
 
     async def async_step_init(self, user_input=None):
@@ -137,6 +136,8 @@ class IxfieldOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_reload_sensors()
             elif user_input.get("action") == "reenumerate_sensors":
                 return await self.async_step_reenumerate_sensors()
+            elif user_input.get("action") == "reenumerate_devices":
+                return await self.async_step_reenumerate_devices()
             elif user_input.get("action") == "update_devices":
                 return await self.async_step_update_devices()
             else:
@@ -146,25 +147,17 @@ class IxfieldOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Optional(
-                    CONF_DEVICES,
-                    default=self.config_entry.data.get(CONF_DEVICES, "")
-                ): str,
-                vol.Optional(
-                    CONF_DEVICE_NAMES,
-                    default=self.config_entry.data.get(CONF_DEVICE_NAMES, "")
-                ): str,
                 vol.Required("action"): vol.In({
                     "update_devices": "Update Device Configuration",
+                    "reenumerate_devices": "Re-enumerate Devices (Discover New Devices)",
                     "reload_sensors": "Reload Sensors (Refresh Data)",
                     "reenumerate_sensors": "Re-enumerate Sensors (Rediscover)"
                 })
             }),
             description_placeholders={
-                "devices_help": "Comma-separated device IDs",
-                "names_help": "Optional JSON mapping of device IDs to custom names",
                 "reload_help": "Refresh sensor data without rediscovery",
-                "reenumerate_help": "Rediscover all sensors and devices"
+                "reenumerate_help": "Rediscover all sensors and devices",
+                "reenumerate_devices_help": "Fetch fresh device list from IXField API"
             }
         )
 
@@ -236,51 +229,90 @@ class IxfieldOptionsFlow(config_entries.OptionsFlow):
             }
         )
 
+    async def async_step_reenumerate_devices(self, user_input=None):
+        """Handle device re-enumeration."""
+        if user_input is not None:
+            if user_input.get("confirm"):
+                try:
+                    # Get fresh device data from API
+                    email = self.config_entry.data["email"]
+                    password = self.config_entry.data["password"]
+                    
+                    session = aiohttp.ClientSession()
+                    api = IxfieldApi(email, password, session)
+                    await api.async_login()
+                    
+                    devices_response = await api.async_get_user_devices()
+                    await session.close()
+                    
+                    if devices_response is None:
+                        return self.async_abort(reason="failed_to_fetch_devices")
+                    
+                    devices_data = devices_response.get("data", {}).get("me", {}).get("devices", [])
+                    
+                    # Create device dictionary with all discovered devices
+                    device_dict = {}
+                    for device in devices_data:
+                        device_id = device.get("id")
+                        if device_id:
+                            device_dict[device_id] = {
+                                "id": device_id,
+                                "name": device.get("name", "Unknown Device"),
+                                "custom_name": device.get("customName"),
+                                "connection_status": device.get("connectionStatus", "Unknown"),
+                                "controller": device.get("controller"),
+                                "operating_mode": device.get("operatingMode"),
+                                "connection_status_changed_time": device.get("connectionStatusChangedTime"),
+                                "company": device.get("company", {}),
+                                "connection_type": device.get("connectionType", {}).get("formattedValue", "Unknown")
+                            }
+
+                    # Update the config entry with new device data
+                    hass = self.hass
+                    hass.config_entries.async_update_entry(
+                        self.config_entry,
+                        data={
+                            "email": self.config_entry.data["email"],
+                            "password": self.config_entry.data["password"],
+                            CONF_DEVICE_DICT: device_dict,
+                            CONF_EXTRACT_DEVICE_INFO_SENSORS: self.config_entry.data.get(CONF_EXTRACT_DEVICE_INFO_SENSORS, True),
+                        }
+                    )
+                    
+                    # Reload the integration with new configuration
+                    await hass.config_entries.async_reload(self.config_entry.entry_id)
+                    
+                    _LOGGER.info(f"Devices re-enumerated successfully. Found {len(device_dict)} devices.")
+                    return self.async_create_entry(title="", data={
+                        "email": self.config_entry.data["email"],
+                        "password": self.config_entry.data["password"],
+                        CONF_DEVICE_DICT: device_dict,
+                        CONF_EXTRACT_DEVICE_INFO_SENSORS: self.config_entry.data.get(CONF_EXTRACT_DEVICE_INFO_SENSORS, True),
+                    })
+                    
+                except Exception as e:
+                    _LOGGER.error(f"Failed to re-enumerate devices: {e}")
+                    return self.async_abort(reason="reenumerate_devices_failed")
+            else:
+                return self.async_create_entry(title="", data=self.config_entry.data)
+
+        return self.async_show_form(
+            step_id="reenumerate_devices",
+            data_schema=vol.Schema({
+                vol.Required("confirm"): bool
+            }),
+            description_placeholders={
+                "action": "re-enumerate devices",
+                "description": "This will fetch the latest device list from IXField API and update your configuration. This is useful when you add new devices to your IXField account."
+            }
+        )
+
     async def async_step_update_devices(self, user_input=None):
         """Handle device configuration update."""
         if user_input is not None:
-            # Validate the new device configuration
-            new_devices = user_input.get(CONF_DEVICES, "")
-            new_device_names = user_input.get(CONF_DEVICE_NAMES, "")
-            device_ids = [d.strip() for d in new_devices.split(",") if d.strip()]
+            extract_device_info_sensors = user_input.get(CONF_EXTRACT_DEVICE_INFO_SENSORS, True)
             
-            if not device_ids:
-                return self.async_show_form(
-                    step_id="update_devices",
-                    data_schema=vol.Schema({
-                        vol.Optional(
-                            CONF_DEVICES,
-                            default=new_devices
-                        ): str,
-                        vol.Optional(
-                            CONF_DEVICE_NAMES,
-                            default=new_device_names
-                        ): str,
-                    }),
-                    errors={"base": "no_devices"}
-                )
-            
-            # Validate device names JSON if provided
-            if new_device_names:
-                try:
-                    json.loads(new_device_names)
-                except json.JSONDecodeError:
-                    return self.async_show_form(
-                        step_id="update_devices",
-                        data_schema=vol.Schema({
-                            vol.Optional(
-                                CONF_DEVICES,
-                                default=new_devices
-                            ): str,
-                            vol.Optional(
-                                CONF_DEVICE_NAMES,
-                                default=new_device_names
-                            ): str,
-                        }),
-                        errors={"base": "invalid_device_names_json"}
-                )
-            
-            # Test the new configuration
+            # Get available devices
             try:
                 email = self.config_entry.data[CONF_EMAIL]
                 password = self.config_entry.data[CONF_PASSWORD]
@@ -289,24 +321,40 @@ class IxfieldOptionsFlow(config_entries.OptionsFlow):
                 api = IxfieldApi(email, password, session)
                 await api.async_login()
                 
-                # Test access to at least one device
-                if device_ids:
-                    test_device = device_ids[0]
-                    test_data = await api.async_get_device(test_device)
-                    if test_data is None:
-                        raise Exception(f"Cannot access device {test_device}")
-                
+                devices_response = await api.async_get_user_devices()
                 await session.close()
                 
+                if devices_response is None:
+                    return self.async_abort(reason="failed_to_fetch_devices")
+                
+                devices_data = devices_response.get("data", {}).get("me", {}).get("devices", [])
+                
+                # Create device dictionary with all discovered devices
+                device_dict = {}
+                for device in devices_data:
+                    device_id = device.get("id")
+                    if device_id:
+                        device_dict[device_id] = {
+                            "id": device_id,
+                            "name": device.get("name", "Unknown Device"),
+                            "custom_name": device.get("customName"),
+                            "connection_status": device.get("connectionStatus", "Unknown"),
+                            "controller": device.get("controller"),
+                            "operating_mode": device.get("operatingMode"),
+                            "connection_status_changed_time": device.get("connectionStatusChangedTime"),
+                            "company": device.get("company", {}),
+                            "connection_type": device.get("connectionType", {}).get("formattedValue", "Unknown")
+                        }
+
                 # Update the config entry
                 hass = self.hass
                 hass.config_entries.async_update_entry(
                     self.config_entry,
                     data={
-                        CONF_EMAIL: email,
-                        CONF_PASSWORD: password,
-                        CONF_DEVICES: new_devices,
-                        CONF_DEVICE_NAMES: new_device_names,
+                        CONF_EMAIL: self.config_entry.data[CONF_EMAIL],
+                        CONF_PASSWORD: self.config_entry.data[CONF_PASSWORD],
+                        CONF_DEVICE_DICT: device_dict,
+                        CONF_EXTRACT_DEVICE_INFO_SENSORS: extract_device_info_sensors,
                     }
                 )
                 
@@ -315,45 +363,25 @@ class IxfieldOptionsFlow(config_entries.OptionsFlow):
                 
                 _LOGGER.info("Device configuration updated successfully")
                 return self.async_create_entry(title="", data={
-                    CONF_EMAIL: email,
-                    CONF_PASSWORD: password,
-                    CONF_DEVICES: new_devices,
-                    CONF_DEVICE_NAMES: new_device_names,
+                    CONF_EMAIL: self.config_entry.data[CONF_EMAIL],
+                    CONF_PASSWORD: self.config_entry.data[CONF_PASSWORD],
+                    CONF_DEVICE_DICT: device_dict,
+                    CONF_EXTRACT_DEVICE_INFO_SENSORS: extract_device_info_sensors,
                 })
                 
             except Exception as e:
                 _LOGGER.error(f"Failed to update device configuration: {e}")
-                await session.close()
-                return self.async_show_form(
-                    step_id="update_devices",
-                    data_schema=vol.Schema({
-                        vol.Optional(
-                            CONF_DEVICES,
-                            default=new_devices
-                        ): str,
-                        vol.Optional(
-                            CONF_DEVICE_NAMES,
-                            default=new_device_names
-                        ): str,
-                    }),
-                    errors={"base": "update_failed"}
-                )
+                return self.async_abort(reason="update_failed")
 
         return self.async_show_form(
             step_id="update_devices",
             data_schema=vol.Schema({
                 vol.Optional(
-                    CONF_DEVICES,
-                    default=self.config_entry.data.get(CONF_DEVICES, "")
-                ): str,
-                vol.Optional(
-                    CONF_DEVICE_NAMES,
-                    default=self.config_entry.data.get(CONF_DEVICE_NAMES, "")
-                ): str,
+                    CONF_EXTRACT_DEVICE_INFO_SENSORS,
+                    default=self.config_entry.data.get(CONF_EXTRACT_DEVICE_INFO_SENSORS, True)
+                ): bool,
             }),
             description_placeholders={
-                "devices_help": "Comma-separated device IDs",
-                "names_help": "Optional JSON mapping of device IDs to custom names (e.g., {\"device1\": \"Pool Controller\", \"device2\": \"Garden System\"})",
-                "description": "Update the list of devices to monitor and their custom names. This will reload the integration with the new configuration."
+                "description": "Update device configuration. All available devices will be automatically selected."
             }
         ) 

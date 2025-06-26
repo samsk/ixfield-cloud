@@ -109,3 +109,40 @@ class IxfieldApi:
             else:
                 _LOGGER.error(f"API returned failure for setting control {control_name} to {value} on device {device_id}")
             return success 
+
+    async def async_get_user_devices(self):
+        """Get all user devices using the GetUserDevices query."""
+        headers = {
+            "Content-Type": "application/json",
+        }
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+        
+        payload = {
+            "operationName": "GetUserDevices",
+            "variables": {
+                "pageNumber": 1,
+                "withCompanyName": True,
+                "withCustomName": True,
+                "withAddress": False,
+                "type": "POOL",
+                "companyId": None,
+                "searchText": "",
+                "connectionStatus": None,
+                "withEvents": None,
+                "lang": "en"
+            },
+            "query": "query GetUserDevices($type: DeviceTypeEnum!, $companyId: ID, $searchText: String, $pageNumber: Int! = 1, $connectionStatus: Boolean, $withEvents: Boolean, $withCompanyName: Boolean! = false, $withCustomName: Boolean! = false, $withAddress: Boolean! = false, $lang: String!) {\n  me {\n    id\n    devices(\n      type: $type\n      companyId: $companyId\n      searchText: $searchText\n      pageNumber: $pageNumber\n      connectionStatus: $connectionStatus\n      withEvents: $withEvents\n    ) {\n      id\n      name\n      connectionType: paramByName(name: \"connectionType\", lang: $lang) {\n        formattedValue\n        __typename\n      }\n      customName @include(if: $withCustomName)\n      controller\n      operatingMode\n      connectionStatus\n      connectionStatusChangedTime\n      company @include(if: $withCompanyName) {\n        id\n        name\n        __typename\n      }\n      eventDetectionPoints {\n        eventCodes {\n          severity\n          description(lang: $lang)\n          __typename\n        }\n        __typename\n      }\n      address @include(if: $withAddress) {\n        lat\n        lng\n        approximateLat\n        approximateLng\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n"
+        }
+        
+        _LOGGER.debug("Making API request to get user devices")
+        async with self._session.post(GRAPHQL_URL, json=payload, headers=headers) as resp:
+            _LOGGER.debug(f"GetUserDevices API response status: {resp.status}")
+            if resp.status != 200:
+                _LOGGER.error(f"Failed to fetch user devices: {resp.status}")
+                response_text = await resp.text()
+                _LOGGER.error(f"Response body: {response_text}")
+                return None
+            response_data = await resp.json()
+            _LOGGER.debug(f"GetUserDevices API response data: {response_data}")
+            return response_data 
