@@ -236,6 +236,7 @@ This project is licensed under the GPL License - see the [LICENSE](LICENSE) file
 - IXField for providing the API
 - Home Assistant community for inspiration and support
 - Contributors and testers
+- AI for implementing this
 
 ## 📞 Support
 

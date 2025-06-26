@@ -8,6 +8,7 @@ from .entity_helper import (
     EntityNamingMixin,
     EntityValueMixin,
     create_unique_id,
+    get_controls,
 )
 from .optimistic_state import OptimisticStateManager, boolean_comparison
 from .sensor import generate_human_readable_name
@@ -53,10 +54,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     device_ids = coordinator.device_ids
     switches = []
     for device_id in device_ids:
-        device_data = coordinator.data.get(device_id, {})
-        device = device_data.get("data", {}).get("device", {})
         device_name = coordinator.get_device_name(device_id)
-        for control in device.get("liveDeviceData", {}).get("controls", []):
+        controls = get_controls(coordinator, device_id)
+        
+        for control in controls:
             control_name = control.get("name")
             if not control_name:
                 continue

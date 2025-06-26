@@ -29,6 +29,48 @@ def create_unique_id(
     return unique_id
 
 
+def get_operating_values(coordinator, device_id: str) -> list:
+    """
+    Get operating values (sensors) for a device from coordinator data.
+
+    Args:
+        coordinator: The IXField coordinator
+        device_id: The device ID
+
+    Returns:
+        List of operating values (sensors) for the device
+    """
+    device_data = coordinator.data.get(device_id, {})
+    if not device_data or "data" not in device_data:
+        return []
+
+    device = device_data.get("data", {}).get("device", {})
+    operating_values = device.get("liveDeviceData", {}).get("operatingValues", [])
+    
+    return operating_values
+
+
+def get_controls(coordinator, device_id: str) -> list:
+    """
+    Get controls for a device from coordinator data.
+
+    Args:
+        coordinator: The IXField coordinator
+        device_id: The device ID
+
+    Returns:
+        List of controls for the device
+    """
+    device_data = coordinator.data.get(device_id, {})
+    if not device_data or "data" not in device_data:
+        return []
+
+    device = device_data.get("data", {}).get("device", {})
+    controls = device.get("liveDeviceData", {}).get("controls", [])
+    
+    return controls
+
+
 class EntityNamingMixin:
     """Mixin class to provide standardized entity naming for IXField entities."""
 

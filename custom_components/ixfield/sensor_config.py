@@ -15,6 +15,11 @@ SENSOR_OVERRIDES = {
         "settable": False,  # Force this sensor to be non-settable
         "reason": "Remaining Agent A should be read-only",
     },
+    "targetORP": {
+        "settable": False,
+        "show_desired_as_sensor": True,
+        "reason": "Target ORP should be settable only via WEB",
+    },
     # Example of overriding other sensor properties:
     # "poolTempWithSettings": {
     #     "name": "Pool Temperature",  # Override the display name
@@ -24,7 +29,8 @@ SENSOR_OVERRIDES = {
     #     "max_value": 40,  # Override max value
     #     "step": 0.5,  # Override step value
     #     "settable": True,  # Force settable
-    #     "reason": "Pool temperature should be settable with custom range"
+    #     "reason": "Pool temperature should be settable with custom range",
+    #     "show_desired_as_sensor": True,  # Show desired value as sensor
     # },
     # You can add more overrides here:
     # "sensorName": {
@@ -136,11 +142,12 @@ def should_skip_sensor_for_platform(sensor_name, sensor_data, platform):
     is_desired = modified_data.get("showDesired", False)
 
     if platform == "sensor":
-        # Skip settable sensors (except desired sensors)
-        return is_settable and not is_desired
+        # Skip settable sensors (except desired sensors, but enum sensors should go to select platform)
+        # Also skip settable sensors that will be handled by number platform
+        return is_settable and (not is_desired or is_enum)
 
     elif platform == "number":
-        # Skip non-settable sensors and enum sensors
+        # Skip non-settable sensors and enum sensors (enum sensors should go to select platform)
         return not is_settable or is_enum
 
     elif platform == "select":

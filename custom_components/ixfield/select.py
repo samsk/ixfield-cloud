@@ -9,6 +9,7 @@ from .entity_helper import (
     EntityNamingMixin,
     EntityValueMixin,
     create_unique_id,
+    get_operating_values,
 )
 from .optimistic_state import OptimisticStateManager, string_comparison_ignore_case
 from .sensor_config import should_skip_sensor_for_platform
@@ -31,9 +32,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             f"Processing select entities for device {device_id}: {device_name}"
         )
 
-        device_data = coordinator.data.get(device_id, {})
-        device = device_data.get("data", {}).get("device", {})
-        operating_values = device.get("liveDeviceData", {}).get("operatingValues", [])
+        operating_values = get_operating_values(coordinator, device_id)
 
         # Process operating values to find settable enum sensors
         for sensor_data in operating_values:

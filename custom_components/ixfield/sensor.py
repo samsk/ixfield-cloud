@@ -10,6 +10,7 @@ from .entity_helper import (
     EntityNamingMixin,
     EntityValueMixin,
     create_unique_id,
+    get_operating_values,
 )
 from .sensor_config import apply_sensor_overrides, should_skip_sensor_for_platform
 
@@ -94,6 +95,7 @@ def get_sensor_config(sensor_name, sensor_data):
         "step": options.get("step", 1),
         "value": modified_sensor_data.get("value"),
         "desired_value": modified_sensor_data.get("desiredValue"),
+        "show_desired_as_sensor": modified_sensor_data.get("show_desired_as_sensor", False),
         "options": options,  # Include the full options object for select entities
     }
 
@@ -116,9 +118,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             f"Device info for {device_id}: {device_name} - {device_info.get('type', 'Unknown')}"
         )
 
-        device_data = coordinator.data.get(device_id, {})
-        device = device_data.get("data", {}).get("device", {})
-        operating_values = device.get("liveDeviceData", {}).get("operatingValues", [])
+        operating_values = get_operating_values(coordinator, device_id)
 
         _LOGGER.debug(
             f"Processing {len(operating_values)} operating values for device {device_id}"
@@ -161,6 +161,17 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 created_unique_ids.add(main_sensor.unique_id)
                 all_sensor_names.append(main_sensor.name)
                 _LOGGER.debug(f"Created sensor: {main_sensor.name}")
+
+            # Create target sensor if this sensor has showDesired=True
+            if config.get("show_desired_as_sensor", False):
+                target_sensor = IxfieldTargetSensor(
+                    coordinator, device_id, device_name, sensor_name, config
+                )
+                if target_sensor.unique_id not in created_unique_ids:
+                    sensors.append(target_sensor)
+                    created_unique_ids.add(target_sensor.unique_id)
+                    all_sensor_names.append(target_sensor.name)
+                    _LOGGER.debug(f"Created target sensor: {target_sensor.name}")
 
     _LOGGER.info(f"Created {len(sensors)} sensors: {all_sensor_names}")
     async_add_entities(sensors)
@@ -249,3 +260,83 @@ class IxfieldSensor(
             await self.coordinator.async_request_refresh()
         else:
             _LOGGER.error(f"Failed to set {self._attr_name} to {value}")
+
+
+class IxfieldTargetSensor(
+    CoordinatorEntity,
+    SensorEntity,
+    EntityNamingMixin,
+    EntityCommonAttrsMixin,
+    EntityValueMixin,
+):
+    """Representation of an IXField target sensor that shows the desired/target value."""
+
+    def __init__(
+        self, coordinator, device_id, device_name, sensor_name, config
+    ):
+        # Create a target-specific config
+        target_config = config.copy()
+        target_config["name"] = f"{config['name']} Target"
+        
+        self.setup_entity_naming(
+            device_name, sensor_name, "sensor", target_config["name"], is_target=True
+        )
+        self.set_common_attrs(target_config, "sensor")
+        super().__init__(coordinator)
+
+        self._device_id = device_id
+        self._device_name = device_name
+        self._value_name = sensor_name
+        self._label = target_config["name"]
+        self._value_key = "desiredValue"  # Use desiredValue instead of value
+        self._initial_value = config.get("desired_value")  # Store the initial desired value
+        self._attr_unique_id = create_unique_id(device_id, sensor_name, "sensor", is_target=True)
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.last_update_success
+
+    @property
+    def native_value(self):
+        # Try to get desired value from coordinator data first
+        value = self.get_sensor_value(self._value_name, "desiredValue")
+        if value is not None:
+            return value
+
+        # Fallback to initial desired value from config
+        if self._initial_value is not None:
+            try:
+                return (
+                    float(self._initial_value)
+                    if self._initial_value is not None
+                    else None
+                )
+            except (TypeError, ValueError):
+                return self._initial_value
+
+        return None
+
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        _LOGGER.debug(f"Coordinator update for target sensor {self._value_name}")
+        super()._handle_coordinator_update()
+        # Force a state update
+        self.async_write_ha_state()
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        device_info = self.coordinator.get_device_info(self._device_id)
+        company = device_info.get("company", {})
+        thing_type = device_info.get("thing_type", {})
+
+        return {
+            "identifiers": {(DOMAIN, self._device_id)},
+            "name": self._device_name,
+            "manufacturer": company.get("name", "IXField"),
+            "model": device_info.get("type", "Unknown"),
+            "sw_version": device_info.get("controller", "Unknown"),
+            "hw_version": thing_type.get("name", "Unknown"),
+            "configuration_url": f"{IXFIELD_DEVICE_URL}/{self._device_id}",
+        }

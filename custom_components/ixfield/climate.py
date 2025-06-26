@@ -10,6 +10,7 @@ from .entity_helper import (
     EntityNamingMixin,
     EntityValueMixin,
     create_unique_id,
+    get_operating_values,
 )
 from .optimistic_state import (
     OptimisticStateManager,
@@ -37,9 +38,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             f"Processing climate entities for device {device_id}: {device_name}"
         )
 
-        device_data = coordinator.data.get(device_id, {})
-        device = device_data.get("data", {}).get("device", {})
-        operating_values = device.get("liveDeviceData", {}).get("operatingValues", [])
+        operating_values = get_operating_values(coordinator, device_id)
 
         _LOGGER.debug(
             f"Processing {len(operating_values)} operating values for climate entities on device {device_id}"
@@ -180,9 +179,15 @@ class IxfieldClimate(
     def hvac_action(self):
         """Return the current HVAC action (heating, cooling, idle, etc.)."""
         # First check if we have a specific heaterMode sensor
-        heater_mode_value = self.get_sensor_value("heaterMode", "value")
-        if heater_mode_value == "HEATING":
-            return "heating"
+        operating_values = get_operating_values(self.coordinator, self._device_id)
+        
+        # Look for heaterMode sensor in operating values
+        for sensor in operating_values:
+            if sensor.get("name") == "heaterMode":
+                heater_mode_value = sensor.get("value")
+                if heater_mode_value == "HEATING":
+                    return "heating"
+                break
 
         # Fallback to checking the mode sensor if available
         if self._mode_sensor:
