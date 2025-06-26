@@ -197,6 +197,26 @@
           "description": "The config entry ID to reload"
         }
       }
+    },
+    "ixfield_configure_control_mappings": {
+      "name": "IXField Configure Control Mappings",
+      "description": "Configure custom control mappings for IXField devices",
+      "fields": {
+        "mappings": {
+          "name": "Control Mappings",
+          "description": "Custom control mappings to configure"
+        }
+      }
+    },
+    "ixfield_get_available_controls": {
+      "name": "IXField Get Available Controls",
+      "description": "Get available controls for a specific device",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "The device ID to get available controls for"
+        }
+      }
     }
   }
 } 

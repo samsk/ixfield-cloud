@@ -3,6 +3,12 @@ import logging
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.const import CONF_ENTITY_ID
 from .const import DOMAIN
+from .service_config import (
+    find_matching_sensor, 
+    validate_control_value, 
+    format_control_value,
+    get_available_controls
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,46 +34,70 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.error(f"Could not find coordinator for device {device_id}")
             return
         
-        # Control mapping
-        control_mapping = {
-            "circulation_pump": "filtrationState",
-            "lighting": "lightsState",
-            "counterflow": "jetstreamState",
-            "target_temperature": "poolTempWithSettings",
-            "target_orp": "targetORP",
-            "target_ph": "targetpH",
-            "agent_volume": "remainingAgentA",
-            "heater_mode": "targetHeaterMode"
-        }
+        # Get available sensors from the device
+        device_data = coordinator.data.get(device_id, {})
+        device = device_data.get("data", {}).get("device", {})
+        operating_values = device.get("liveDeviceData", {}).get("operatingValues", [])
+        
+        # Get available controls for this device
+        available_controls = get_available_controls(operating_values)
+        _LOGGER.debug(f"Available controls for device {device_id}: {list(available_controls.keys())}")
         
         success_count = 0
         total_controls = 0
+        failed_controls = []
         
         for control_name, value in controls.items():
-            if control_name in control_mapping:
-                api_control_name = control_mapping[control_name]
-                total_controls += 1
+            # Check if this control is available for this device
+            if control_name not in available_controls:
+                _LOGGER.warning(f"Control '{control_name}' not available for device {device_id}")
+                failed_controls.append(f"{control_name}: not available")
+                continue
+            
+            control_info = available_controls[control_name]
+            sensor_name = control_info["sensor_name"]
+            sensor_data = control_info["sensor_data"]
+            
+            # Validate the control value
+            is_valid, error_msg = validate_control_value(control_name, value)
+            if not is_valid:
+                _LOGGER.error(f"Invalid value for {control_name}: {error_msg}")
+                failed_controls.append(f"{control_name}: {error_msg}")
+                continue
+            
+            # Check if the sensor is settable
+            if not sensor_data.get("settable", False):
+                _LOGGER.warning(f"Control '{control_name}' (sensor '{sensor_name}') is not settable")
+                failed_controls.append(f"{control_name}: sensor not settable")
+                continue
+            
+            total_controls += 1
+            
+            try:
+                # Format the value for the API
+                formatted_value = format_control_value(control_name, value)
                 
-                try:
-                    # Convert boolean values to strings for API
-                    if isinstance(value, bool):
-                        value = "true" if value else "false"
-                    else:
-                        value = str(value)
-                    
-                    success = await coordinator.api.async_set_control(device_id, api_control_name, value)
-                    if success:
-                        _LOGGER.info(f"Successfully set {control_name} to {value}")
-                        success_count += 1
-                    else:
-                        _LOGGER.error(f"Failed to set {control_name} to {value}")
-                except Exception as e:
-                    _LOGGER.error(f"Error setting {control_name}: {e}")
+                _LOGGER.debug(f"Setting {control_name} (sensor: {sensor_name}) to {formatted_value}")
+                success = await coordinator.api.async_set_control(device_id, sensor_name, formatted_value)
+                
+                if success:
+                    _LOGGER.info(f"Successfully set {control_name} to {value}")
+                    success_count += 1
+                else:
+                    _LOGGER.error(f"Failed to set {control_name} to {value}")
+                    failed_controls.append(f"{control_name}: API call failed")
+            except Exception as e:
+                _LOGGER.error(f"Error setting {control_name}: {e}")
+                failed_controls.append(f"{control_name}: {str(e)}")
         
         if total_controls > 0:
             _LOGGER.info(f"Device control completed: {success_count}/{total_controls} controls set successfully")
+            if failed_controls:
+                _LOGGER.warning(f"Failed controls: {failed_controls}")
             # Trigger a coordinator refresh to update the UI
             await coordinator.async_request_refresh()
+        else:
+            _LOGGER.warning(f"No valid controls found for device {device_id}")
     
     async def device_service_sequence(call: ServiceCall) -> None:
         """Start a service sequence on an IXField device."""
@@ -325,34 +355,92 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.error(f"Error re-enumerating sensors: {e}")
 
     async def reload_integration(call: ServiceCall) -> None:
-        """Reload a specific IXField integration."""
-        entry_id = call.data.get("entry_id")
-        
-        if not entry_id:
-            _LOGGER.error("No entry_id provided for integration reload")
-            return
-        
-        _LOGGER.info(f"Reloading IXField integration with entry_id: {entry_id}")
+        """Reload the IXField integration."""
+        _LOGGER.info("Reloading IXField integration")
         
         try:
-            # Find the config entry
-            config_entry = None
-            for entry in hass.config_entries.async_entries(DOMAIN):
-                if entry.entry_id == entry_id:
-                    config_entry = entry
-                    break
+            # Reload all IXField config entries
+            for entry_id in list(hass.data[DOMAIN].keys()):
+                await hass.config_entries.async_reload(entry_id)
+            _LOGGER.info("Successfully reloaded IXField integration")
+        except Exception as e:
+            _LOGGER.error(f"Error reloading IXField integration: {e}")
+    
+    async def configure_control_mappings(call: ServiceCall) -> None:
+        """Configure custom control mappings for IXField devices."""
+        from .service_config import set_user_control_mappings
+        
+        mappings = call.data.get("mappings", {})
+        
+        _LOGGER.info(f"Configuring control mappings: {list(mappings.keys())}")
+        
+        try:
+            set_user_control_mappings(mappings)
+            _LOGGER.info("Control mappings configured successfully")
+        except Exception as e:
+            _LOGGER.error(f"Error configuring control mappings: {e}")
+    
+    async def get_available_controls(call: ServiceCall) -> None:
+        """Get available controls for a specific device."""
+        device_id = call.data.get("device_id")
+        
+        if not device_id:
+            _LOGGER.error("device_id is required for get_available_controls service")
+            return
+        
+        _LOGGER.info(f"Getting available controls for device {device_id}")
+        
+        # Find the coordinator for this device
+        coordinator = None
+        for entry_id, data in hass.data[DOMAIN].items():
+            coord = data["coordinator"]
+            if device_id in coord.device_ids:
+                coordinator = coord
+                break
+        
+        if not coordinator:
+            _LOGGER.error(f"Could not find coordinator for device {device_id}")
+            return
+        
+        try:
+            # Get available sensors from the device
+            device_data = coordinator.data.get(device_id, {})
+            device = device_data.get("data", {}).get("device", {})
+            operating_values = device.get("liveDeviceData", {}).get("operatingValues", [])
             
-            if not config_entry:
-                _LOGGER.error(f"Config entry {entry_id} not found")
-                return
+            # Get available controls for this device
+            from .service_config import get_available_controls
+            available_controls = get_available_controls(operating_values)
             
-            # Reload the integration
-            await hass.config_entries.async_reload(config_entry.entry_id)
-            _LOGGER.info(f"Successfully reloaded IXField integration {entry_id}")
+            # Format the response
+            controls_info = {}
+            for control_name, control_info in available_controls.items():
+                sensor_data = control_info["sensor_data"]
+                config = control_info["config"]
+                
+                controls_info[control_name] = {
+                    "sensor_name": control_info["sensor_name"],
+                    "description": config.get("description", ""),
+                    "type": config.get("type", "string"),
+                    "unit": config.get("unit", ""),
+                    "settable": sensor_data.get("settable", False),
+                    "current_value": sensor_data.get("value"),
+                    "desired_value": sensor_data.get("desiredValue"),
+                    "label": sensor_data.get("label", "")
+                }
+            
+            _LOGGER.info(f"Available controls for device {device_id}: {controls_info}")
+            
+            # Store the information in hass.data for potential use by other components
+            if DOMAIN not in hass.data:
+                hass.data[DOMAIN] = {}
+            if "available_controls" not in hass.data[DOMAIN]:
+                hass.data[DOMAIN]["available_controls"] = {}
+            hass.data[DOMAIN]["available_controls"][device_id] = controls_info
             
         except Exception as e:
-            _LOGGER.error(f"Error reloading integration {entry_id}: {e}")
-    
+            _LOGGER.error(f"Error getting available controls for device {device_id}: {e}")
+
     # Register the services
     hass.services.async_register(DOMAIN, "device_control", device_control)
     hass.services.async_register(DOMAIN, "device_service_sequence", device_service_sequence)
@@ -362,6 +450,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, "reload_sensors", reload_sensors)
     hass.services.async_register(DOMAIN, "reenumerate_sensors", reenumerate_sensors)
     hass.services.async_register(DOMAIN, "reload_integration", reload_integration)
+    hass.services.async_register(DOMAIN, "configure_control_mappings", configure_control_mappings)
+    hass.services.async_register(DOMAIN, "get_available_controls", get_available_controls)
 
 async def async_unload_services(hass: HomeAssistant) -> None:
     """Unload IXField services."""
@@ -372,4 +462,6 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, "get_device_info")
     hass.services.async_remove(DOMAIN, "reload_sensors")
     hass.services.async_remove(DOMAIN, "reenumerate_sensors")
-    hass.services.async_remove(DOMAIN, "reload_integration") 
+    hass.services.async_remove(DOMAIN, "reload_integration")
+    hass.services.async_remove(DOMAIN, "configure_control_mappings")
+    hass.services.async_remove(DOMAIN, "get_available_controls") 

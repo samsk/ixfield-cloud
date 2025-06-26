@@ -174,4 +174,70 @@ ixfield_get_device_info:
       description: "The device ID to get information for"
       required: true
       selector:
-        text: 
+        text:
+
+ixfield_configure_control_mappings:
+  name: "IXField Configure Control Mappings"
+  description: "Configure custom control mappings for IXField devices"
+  target:
+    entity:
+      integration: ixfield
+  fields:
+    mappings:
+      name: "Control Mappings"
+      description: "Custom control mappings to configure"
+      required: true
+      selector:
+        object:
+          fields:
+            custom_control_name:
+              name: "Custom Control Name"
+              description: "Example of a custom control mapping"
+              selector:
+                object:
+                  fields:
+                    sensor_patterns:
+                      name: "Sensor Patterns"
+                      description: "List of sensor name patterns to match"
+                      selector:
+                        select:
+                          multiple: true
+                          options:
+                            - "exactSensorName"
+                            - "*WithSettings"
+                            - "target*"
+                    description:
+                      name: "Description"
+                      description: "Description of this control"
+                      selector:
+                        text:
+                    type:
+                      name: "Type"
+                      description: "Control type (boolean, temperature, number, enum, string)"
+                      selector:
+                        select:
+                          options:
+                            - "boolean"
+                            - "temperature"
+                            - "number"
+                            - "enum"
+                            - "string"
+                    unit:
+                      name: "Unit"
+                      description: "Unit of measurement (optional)"
+                      selector:
+                        text:
+
+ixfield_get_available_controls:
+  name: "IXField Get Available Controls"
+  description: "Get available controls for a specific device"
+  target:
+    entity:
+      integration: ixfield
+  fields:
+    device_id:
+      name: "Device ID"
+      description: "The device ID to get available controls for"
+      required: true
+      selector:
+        text:

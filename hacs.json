@@ -1,0 +1,43 @@
+{
+  "name": "IXField Home Assistant Integration",
+  "render_readme": true,
+  "domains": ["ixfield"],
+  "homeassistant": "2023.8.0",
+  "iot_class": "Cloud Polling",
+  "zip_release": false,
+  "filename": "custom_components/ixfield",
+  "persistent_directory": "custom_components/ixfield",
+  "content_in_root": false,
+  "hacs": "1.0.0",
+  "hide_default_branch": false,
+  "authors": [
+    "samsk"
+  ],
+  "country": [
+    "US",
+    "EU"
+  ],
+  "topics": [
+    "pool",
+    "spa",
+    "water",
+    "automation",
+    "climate",
+    "sensor",
+    "switch"
+  ],
+  "requirements": [
+    "aiohttp>=3.8.0",
+    "boto3>=1.26.0",
+    "warrant>=2.0.0"
+  ],
+  "dependencies": [],
+  "codeowners": [
+    "@samsk"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/samsk/ixfield-cloud",
+  "issue_tracker": "https://github.com/samsk/ixfield-cloud/issues",
+  "version": "1.1.0",
+  "category": "integration"
+} 
