@@ -9,8 +9,97 @@ from custom_components.ixfield.switch import async_setup_entry as setup_switches
 from custom_components.ixfield.number import async_setup_entry as setup_numbers
 from custom_components.ixfield.select import async_setup_entry as setup_selects
 from custom_components.ixfield.climate import async_setup_entry as setup_climate
+from custom_components.ixfield.sensor import async_setup_entry as setup_sensors
 from custom_components.ixfield.entity_helper import get_controls, create_unique_id
 from .test_data import SAMPLE_DEVICE_DATA
+
+
+class TestSensorPlatform:
+    """Test sensor platform functionality."""
+
+    @pytest.mark.asyncio
+    async def test_sensor_setup_entry(self):
+        """Test sensor setup entry."""
+        mock_hass = Mock()
+        mock_config_entry = Mock()
+        mock_config_entry.entry_id = "test_entry"
+        
+        # Mock coordinator
+        mock_coordinator = Mock()
+        mock_coordinator.device_ids = ["test_device_id"]
+        mock_coordinator.get_device_info.return_value = SAMPLE_DEVICE_DATA["data"]["device"]
+        mock_coordinator.get_device_name.return_value = "Test Pool"
+        mock_coordinator.should_extract_device_info_sensors.return_value = False
+        mock_coordinator.data = {
+            "test_device_id": SAMPLE_DEVICE_DATA
+        }
+        
+        mock_hass.data = {
+            "ixfield": {
+                "test_entry": {
+                    "coordinator": mock_coordinator
+                }
+            }
+        }
+        
+        mock_async_add_entities = Mock()
+        
+        # Mock sensor_config to skip certain sensors
+        with patch("custom_components.ixfield.sensor.should_skip_sensor_for_platform", return_value=False):
+            await setup_sensors(mock_hass, mock_config_entry, mock_async_add_entities)
+        
+        # Verify entities were added
+        mock_async_add_entities.assert_called_once()
+        entities = mock_async_add_entities.call_args[0][0]
+        
+        # Should create sensors for non-settable operating values
+        assert len(entities) > 0
+        
+        # Check that we have the expected sensor types
+        sensor_names = [entity.name for entity in entities]
+        
+        # Non-settable sensors should be created
+        assert "Salinity" in sensor_names
+        assert "Ambient Temperature" in sensor_names
+        assert "Signal Strength" in sensor_names
+        assert "Heating Status" in sensor_names
+        assert "Internet Connectivity" in sensor_names
+        
+        # Settable sensors with showDesired=True should also create target sensors
+        # (targetORP and targetpH are overridden to show desired values as sensors)
+        target_sensor_names = [name for name in sensor_names if "Target" in name]
+        assert len(target_sensor_names) >= 2  # At least targetORP and targetpH targets
+
+    def test_sensor_entity_properties(self):
+        """Test sensor entity properties."""
+        from custom_components.ixfield.sensor import IxfieldSensor
+        
+        mock_coordinator = Mock()
+        mock_coordinator.data = {
+            "test_device_id": SAMPLE_DEVICE_DATA
+        }
+        mock_coordinator.last_update_success = True
+        
+        config = {
+            "name": "Salinity",
+            "unit": "%",
+            "settable": False,
+            "value": "0.42"
+        }
+        
+        sensor = IxfieldSensor(
+            mock_coordinator,
+            "test_device_id",
+            "Test Pool",
+            "salinity",
+            config
+        )
+        
+        # Test entity properties
+        assert sensor.name == "Salinity"
+        assert sensor.available is True
+        assert sensor.native_value == 0.42
+        assert sensor.native_unit_of_measurement == "%"
 
 
 class TestSwitchPlatform:
@@ -74,8 +163,8 @@ class TestSwitchPlatform:
         mock_async_add_entities.assert_called_once()
         entities = mock_async_add_entities.call_args[0][0]
         
-        # Should create switches for controls
-        assert len(entities) > 0
+        # Should create exactly 3 switches for controls
+        assert len(entities) == 3
         
         # Check that we have the expected switch types
         switch_names = [entity.name for entity in entities]
@@ -249,8 +338,13 @@ class TestNumberPlatform:
         mock_async_add_entities.assert_called_once()
         entities = mock_async_add_entities.call_args[0][0]
         
-        # Should create numbers for settable sensors
-        assert len(entities) > 0
+        # Should create exactly 1 number entity for settable non-enum sensors
+        # (targetORP and targetpH are overridden to be non-settable in sensor config)
+        assert len(entities) == 1
+        
+        # Check that we have the expected number types
+        number_names = [entity.name for entity in entities]
+        assert "Water Temperature Target" in number_names  # This is the target entity for poolTempWithSettings
 
     def test_number_entity_properties(self):
         """Test number entity properties."""
@@ -370,8 +464,12 @@ class TestSelectPlatform:
         mock_async_add_entities.assert_called_once()
         entities = mock_async_add_entities.call_args[0][0]
         
-        # Should create selects for enum sensors
-        assert len(entities) > 0
+        # Should create exactly 1 select entity for settable enum sensors
+        assert len(entities) == 1
+        
+        # Check that we have the expected select types
+        select_names = [entity.name for entity in entities]
+        assert "Heating / Cooling" in select_names
 
     def test_select_entity_properties(self):
         """Test select entity properties."""
@@ -497,8 +595,12 @@ class TestClimatePlatform:
         mock_async_add_entities.assert_called_once()
         entities = mock_async_add_entities.call_args[0][0]
         
-        # Should create climate entities for temperature control
-        assert len(entities) > 0
+        # Should create exactly 1 climate entity for temperature control
+        assert len(entities) == 1
+        
+        # Check that we have the expected climate types
+        climate_names = [entity.name for entity in entities]
+        assert "Water Temperature" in climate_names  # The actual name from the sensor config
 
     def test_climate_entity_properties(self):
         """Test climate entity properties."""
