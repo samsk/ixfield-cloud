@@ -30,3 +30,20 @@ services:
         isort --check-only --diff custom_components/ &&
         echo 'Linting completed successfully!'
       "
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: ixfield-test
+    volumes:
+      - .:/workspace
+      - ./custom_components:/workspace/custom_components
+      - ./tests:/workspace/tests
+    working_dir: /workspace
+    environment:
+      - PYTHONPATH=/workspace
+    command: >
+      sh -c "
+        python -m pytest tests/ -v --cov=custom_components/ixfield --cov-report=term-missing --cov-report=html
+      "

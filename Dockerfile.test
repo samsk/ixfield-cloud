@@ -1,0 +1,15 @@
+FROM ghcr.io/home-assistant/home-assistant:2024.1.0
+
+# Install build tools and test dependencies
+RUN apk update && \
+    apk add --no-cache gcc build-base && \
+    rm -rf /var/cache/apk/*
+
+WORKDIR /workspace
+
+# Copy requirements and install dependencies
+COPY requirements-dev.txt ./
+RUN pip install -r requirements-dev.txt
+
+# Default command (overridden by docker-compose)
+CMD ["bash"] 

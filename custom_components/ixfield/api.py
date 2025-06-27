@@ -3,7 +3,7 @@ import asyncio
 import boto3
 import logging
 from typing import Any, Dict, Optional
-from warrant.aws_srp import AWSSRP
+from pycognito.aws_srp import AWSSRP
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class IxfieldApi:
         self._token: Optional[str] = None
 
     async def async_login(self) -> None:
-        """Authenticate using warrant.aws_srp.AWSSRP for proper SRP handling"""
+        """Authenticate using pycognito.aws_srp.AWSSRP for proper SRP handling"""
         loop = asyncio.get_event_loop()
 
         def do_auth() -> str:

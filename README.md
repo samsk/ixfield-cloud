@@ -1,4 +1,4 @@
-# IXField Home Assistant Integration
+# IXField Things Cloud Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 [![maintainer](https://img.shields.io/badge/maintainer-%40samsk-orange.svg)](https://github.com/samsk)
@@ -110,7 +110,7 @@ The integration uses a sophisticated dynamic control system that automatically d
 You can define custom control mappings for your specific devices:
 
 ```yaml
-service: ixfield.ixfield_configure_control_mappings
+service: ixfield.configure_control_mappings
 data:
   mappings:
     ozone_generator:
@@ -121,6 +121,125 @@ data:
       sensor_patterns: ["customTempSensor", "*Temp*"]
       description: "Custom temperature control"
       type: "temperature"
+      unit: "°C"
+```
+
+## 🛠️ Available Services
+
+The integration provides several services for device control and management:
+
+### Device Control Services
+
+#### `ixfield.device_control`
+Control multiple aspects of an IXField device simultaneously.
+
+```yaml
+service: ixfield.device_control
+data:
+  device_id: "your_device_id"
+  controls:
+    circulation_pump: true
+    lighting: false
+    target_temperature: 25.5
+    target_ph: 7.2
+    target_orp: 650
+    agent_volume: 45.0
+    heater_mode: "AUTO"
+```
+
+#### `ixfield.device_service_sequence`
+Start maintenance and calibration sequences.
+
+```yaml
+service: ixfield.device_service_sequence
+data:
+  device_id: "your_device_id"
+  sequence_name: "phProbeTwoPointCalibration"
+```
+
+Available sequences:
+- `dosingPumpA` - Test dosing pump A
+- `mainPumpOnly` - Test main pump
+- `phProbeOnePointCalibration` - One-point pH probe calibration
+- `phProbeTwoPointCalibration` - Two-point pH probe calibration
+- `orpProbeCheck` - ORP probe check
+- `orpProbeOffsetCalibration` - ORP probe offset calibration
+- `mainPumpTest` - Main pump test
+
+### Device Information Services
+
+#### `ixfield.device_status`
+Get comprehensive status of a device including all sensors and controls.
+
+```yaml
+service: ixfield.device_status
+data:
+  device_id: "your_device_id"
+```
+
+#### `ixfield.get_device_info`
+Get detailed device information including address, contact, and company details.
+
+```yaml
+service: ixfield.get_device_info
+data:
+  device_id: "your_device_id"
+```
+
+#### `ixfield.get_available_controls`
+Get available controls for a specific device with their current values and settings.
+
+```yaml
+service: ixfield.get_available_controls
+data:
+  device_id: "your_device_id"
+```
+
+### Management Services
+
+#### `ixfield.device_refresh`
+Manually refresh data for a specific device.
+
+```yaml
+service: ixfield.device_refresh
+data:
+  device_id: "your_device_id"
+```
+
+#### `ixfield.reload_sensors`
+Reload all sensors for all IXField integrations (refresh data without rediscovery).
+
+```yaml
+service: ixfield.reload_sensors
+```
+
+#### `ixfield.reenumerate_sensors`
+Re-enumerate all sensors for all IXField integrations (rediscover all entities).
+
+```yaml
+service: ixfield.reenumerate_sensors
+```
+
+#### `ixfield.reload_integration`
+Reload a specific IXField integration.
+
+```yaml
+service: ixfield.reload_integration
+data:
+  entry_id: "your_entry_id"
+```
+
+#### `ixfield.configure_control_mappings`
+Configure custom control mappings for IXField devices.
+
+```yaml
+service: ixfield.configure_control_mappings
+data:
+  mappings:
+    custom_control:
+      sensor_patterns: ["customSensor", "*Pattern*"]
+      description: "Custom control description"
+      type: "boolean"
       unit: "°C"
 ```
 
@@ -146,12 +265,12 @@ The integration follows Home Assistant's latest entity naming conventions:
 - Ensure your internet connection is stable
 
 #### Missing Sensors
-- Use the `ixfield_get_available_controls` service to see available sensors
+- Use the `ixfield.get_available_controls` service to see available sensors
 - Check device connection status
 - Try reloading the integration
 
 #### Control Not Working
-- Verify the sensor is settable using `ixfield_get_available_controls`
+- Verify the sensor is settable using `ixfield.get_available_controls`
 - Check device connection status
 - Review the logs for specific error messages
 
@@ -170,20 +289,30 @@ logger:
 
 ```yaml
 # Get device status
-service: ixfield.ixfield_device_status
+service: ixfield.device_status
 data:
   device_id: "your_device_id"
 
 # Refresh device data
-service: ixfield.ixfield_device_refresh
+service: ixfield.device_refresh
 data:
   device_id: "your_device_id"
 
 # Reload all sensors
-service: ixfield.ixfield_reload_sensors
+service: ixfield.reload_sensors
 
 # Re-enumerate all sensors
-service: ixfield.ixfield_reenumerate_sensors
+service: ixfield.reenumerate_sensors
+
+# Get available controls for a device
+service: ixfield.get_available_controls
+data:
+  device_id: "your_device_id"
+
+# Get comprehensive device information
+service: ixfield.get_device_info
+data:
+  device_id: "your_device_id"
 ```
 
 ## 📝 Configuration Files
@@ -195,24 +324,14 @@ service: ixfield.ixfield_reenumerate_sensors
 ixfield:
   email: "your-email@example.com"
   password: "your-password"
-  devices: "device1,device2"
-  device_names:
-    device1: "Backyard Pool"
-    device2: "Spa Controller"
+  device_dict:
+    "device_id_1":
+      name: "Backyard Pool"
+      type: "POOL"
+    "device_id_2":
+      name: "Spa Controller"
+      type: "SPA"
   extract_device_info_sensors: true
-```
-
-### Device Configuration
-
-```yaml
-# Example device configuration
-device_dict:
-  "device_id_1":
-    name: "Backyard Pool"
-    type: "POOL"
-  "device_id_2":
-    name: "Spa Controller"
-    type: "SPA"
 ```
 
 ## 🤝 Contributing
@@ -236,7 +355,7 @@ This project is licensed under the GPL License - see the [LICENSE](LICENSE) file
 - IXField for providing the API
 - Home Assistant community for inspiration and support
 - Contributors and testers
-- AI for implementing this
+- AI for unprecedent help with implementing this integration
 
 ## 📞 Support
 
@@ -252,13 +371,24 @@ If you need help with this integration:
 
 ## 🔄 Changelog
 
-### Version 0.1.0
-- Initial release
-- Full device control and monitoring
-- Dynamic sensor discovery
-- Comprehensive device information
-- Service sequences support
-- Multiple entity types (sensors, numbers, selects, switches, climate)
+### Version 0.1.3
+- Refactored modules to share more functionality
+- Target sensors (pH, ORP) forced as plain sensors to avoid unwanted settings modifications
+- Repository cleanup
+- Added comprehensive module tests
+- Enhanced device discovery and connection management
+- Improved sensor data validation and type safety
+- Better error recovery and retry mechanisms
+- Optimized API request handling
+- Enhanced logging and debugging capabilities
+- Moved to pycognito from obsolete warrant for SRP auth
+
+### Version 0.1.2
+- Enhanced device discovery and connection management
+- Improved sensor data validation and type safety
+- Better error recovery and retry mechanisms
+- Optimized API request handling
+- Enhanced logging and debugging capabilities
 
 ### Version 0.1.1
 - Dynamic control system with pattern matching
@@ -267,12 +397,13 @@ If you need help with this integration:
 - Improved entity naming conventions
 - Additional services for device management
 
-### Version 0.1.2
-- Enhanced device discovery and connection management
-- Improved sensor data validation and type safety
-- Better error recovery and retry mechanisms
-- Optimized API request handling
-- Enhanced logging and debugging capabilities
+### Version 0.1.0
+- Initial release
+- Full device control and monitoring
+- Dynamic sensor discovery
+- Comprehensive device information
+- Service sequences support
+- Multiple entity types (sensors, numbers, selects, switches, climate)
 
 ---
 

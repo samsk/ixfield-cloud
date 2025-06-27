@@ -76,6 +76,7 @@ class OptimisticStateManager:
         # Set optimistic value immediately
         self._optimistic_value = target_value
         self._pending_operation = True
+        success = False  # Initialize success to False
 
         # Force immediate UI update if entity reference is available
         if entity_state_update:

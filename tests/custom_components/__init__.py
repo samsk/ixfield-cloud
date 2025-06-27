@@ -1,0 +1,1 @@
+# This file makes the tests/custom_components directory a Python package 

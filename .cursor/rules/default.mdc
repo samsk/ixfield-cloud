@@ -3,8 +3,21 @@ description:
 globs: 
 alwaysApply: true
 ---
-always use type hints
-do not remove comments, unless requested
-IMPORTANT: when moving code do not modify it, copy as is unless necessary, if something is changed mark the place with short reason comment
-IMPORTANT: when fixing tests try with fixing the test itself, if it can not be fixed giveup and request code fix
-if docker-compose.yml is present, use it to run app or tests via 'docker compose'
+Always use type hints
+Do not remove comments, unless explicitly requested
+If docker-compose.yml is present, use it to run app or tests via 'docker compose'
+
+IMPORTANT:
+ * when moving code do not modify it, copy as is, if something is changed mark the place with short reason comment
+ 
+IMPORTANT FOR INITIAL TESTING:
+Apply if you are creating new tests. It is expected that tested module works as expected, and tests are not correct yet.
+ * If failing test found do not touch the tested module code (non test_*). If test is correct but the test is failing, propose the fix and ask what for permission to apply it !
+ * Do not modify tested module logic
+ * Create test module one by one and make them pass perfectly first, only then continue with next test module
+
+IMPORTANT FOR TESTING:
+ * Do not add stub and helper functions to tested modules, mock it in the test module
+
+
+

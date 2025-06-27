@@ -1,9 +1,9 @@
 {
   "domain": "ixfield",
-  "name": "IXField Cloud",
-  "version": "0.1.0",
+  "name": "IXField",
+  "version": "0.1.3",
   "documentation": "https://github.com/samsk/ixfield-cloud",
-  "requirements": ["warrant", "requests", "aiohttp", "boto3"],
+  "requirements": ["pycognito", "requests", "aiohttp", "boto3"],
   "dependencies": [],
   "codeowners": ["@samsk"],
   "config_flow": true,
