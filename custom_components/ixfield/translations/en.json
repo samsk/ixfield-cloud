@@ -50,14 +50,14 @@
         "description": "This will fetch the latest device list from IXField API and update your configuration. This is useful when you add new devices to your IXField account.",
         "data": {
           "confirm": "Confirm device re-enumeration"
-        },
+        }
       },
       "update_devices": {
         "title": "Update Device Configuration",
         "description": "Update device configuration. All available devices will be automatically selected.",
         "data": {
           "extract_device_info_sensors": "Extract Device Info Sensors"
-        },
+        }
       }
     },
     "error": {
