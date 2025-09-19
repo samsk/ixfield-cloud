@@ -371,6 +371,9 @@ If you need help with this integration:
 
 ## 🔄 Changelog
 
+### Version 0.2.0
+- All tests passing, publishing to HACS
+
 ### Version 0.1.3
 - Refactored modules to share more functionality
 - Target sensors (pH, ORP) forced as plain sensors to avoid unwanted settings modifications
