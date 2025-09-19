@@ -9,6 +9,5 @@
   "dependencies": [],
   "config_flow": true,
   "iot_class": "cloud_polling",
-  "services": ["services.yaml"],
-  "icon": "icon.png"
+  "services": ["services.yaml"]
 }

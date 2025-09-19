@@ -29,7 +29,7 @@
         "description": "Update your IXField configuration or manage sensors",
         "data": {
           "action": "Action"
-        },
+        }
       },
       "reload_sensors": {
         "title": "Reload Sensors",
