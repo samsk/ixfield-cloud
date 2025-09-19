@@ -192,7 +192,6 @@ ixfield_configure_control_mappings:
           fields:
             custom_control_name:
               name: "Custom Control Name"
-              description: "Example of a custom control mapping"
               selector:
                 object:
                   fields:

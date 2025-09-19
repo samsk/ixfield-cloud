@@ -30,11 +30,6 @@
         "data": {
           "action": "Action"
         },
-        "description_placeholders": {
-          "reload_help": "Refresh sensor data without rediscovery",
-          "reenumerate_help": "Rediscover all sensors and devices",
-          "reenumerate_devices_help": "Fetch fresh device list from IXField API"
-        }
       },
       "reload_sensors": {
         "title": "Reload Sensors",
