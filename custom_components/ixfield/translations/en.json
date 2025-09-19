@@ -78,95 +78,23 @@
   "services": {
     "ixfield_device_control": {
       "name": "IXField Device Control",
-      "description": "Control all aspects of an IXField device",
-      "fields": {
-        "device_id": {
-          "name": "Device ID",
-          "description": "The device ID to control"
-        },
-        "controls": {
-          "name": "Controls",
-          "description": "Control settings to apply",
-          "fields": {
-            "circulation_pump": {
-              "name": "Circulation Pump",
-              "description": "Turn circulation pump on/off"
-            },
-            "lighting": {
-              "name": "Lighting",
-              "description": "Turn lighting on/off"
-            },
-            "counterflow": {
-              "name": "Counterflow",
-              "description": "Turn counterflow on/off"
-            },
-            "target_temperature": {
-              "name": "Target Temperature",
-              "description": "Target water temperature in Celsius"
-            },
-            "target_orp": {
-              "name": "Target ORP",
-              "description": "Target ORP value in mV"
-            },
-            "target_ph": {
-              "name": "Target pH",
-              "description": "Target pH value"
-            },
-            "agent_volume": {
-              "name": "Agent A Volume",
-              "description": "Remaining Agent A volume in liters"
-            },
-            "heater_mode": {
-              "name": "Heater Mode",
-              "description": "Heater mode setting"
-            }
-          }
-        }
-      }
+      "description": "Control all aspects of an IXField device"
     },
     "ixfield_device_service_sequence": {
       "name": "IXField Device Service Sequence",
-      "description": "Start a service sequence on an IXField device",
-      "fields": {
-        "device_id": {
-          "name": "Device ID",
-          "description": "The device ID to control"
-        },
-        "sequence_name": {
-          "name": "Sequence Name",
-          "description": "Name of the service sequence to start"
-        }
-      }
+      "description": "Start a service sequence on an IXField device"
     },
     "ixfield_device_status": {
       "name": "IXField Device Status",
-      "description": "Get comprehensive status of an IXField device",
-      "fields": {
-        "device_id": {
-          "name": "Device ID",
-          "description": "The device ID to get status for"
-        }
-      }
+      "description": "Get comprehensive status of an IXField device"
     },
     "ixfield_device_refresh": {
       "name": "IXField Device Refresh",
-      "description": "Manually refresh data for an IXField device",
-      "fields": {
-        "device_id": {
-          "name": "Device ID",
-          "description": "The device ID to refresh"
-        }
-      }
+      "description": "Manually refresh data for an IXField device"
     },
     "ixfield_get_device_info": {
       "name": "IXField Get Device Info",
-      "description": "Get comprehensive device information including address and contact details",
-      "fields": {
-        "device_id": {
-          "name": "Device ID",
-          "description": "The device ID to get information for"
-        }
-      }
+      "description": "Get comprehensive device information including address and contact details"
     },
     "ixfield_reload_sensors": {
       "name": "IXField Reload Sensors",
@@ -178,33 +106,15 @@
     },
     "ixfield_reload_integration": {
       "name": "IXField Reload Integration",
-      "description": "Reload a specific IXField integration",
-      "fields": {
-        "entry_id": {
-          "name": "Entry ID",
-          "description": "The config entry ID to reload"
-        }
-      }
+      "description": "Reload a specific IXField integration"
     },
     "ixfield_configure_control_mappings": {
       "name": "IXField Configure Control Mappings",
-      "description": "Configure custom control mappings for IXField devices",
-      "fields": {
-        "mappings": {
-          "name": "Control Mappings",
-          "description": "Custom control mappings to configure"
-        }
-      }
+      "description": "Configure custom control mappings for IXField devices"
     },
     "ixfield_get_available_controls": {
       "name": "IXField Get Available Controls",
-      "description": "Get available controls for a specific device",
-      "fields": {
-        "device_id": {
-          "name": "Device ID",
-          "description": "The device ID to get available controls for"
-        }
-      }
+      "description": "Get available controls for a specific device"
     }
   }
 } 
