@@ -19,66 +19,6 @@ ixfield_device_control:
       required: false
       selector:
         object:
-          fields:
-            circulation_pump:
-              description: "Turn circulation pump on/off"
-              example: true
-              selector:
-                boolean:
-            lighting:
-              description: "Turn lighting on/off"
-              example: false
-              selector:
-                boolean:
-            counterflow:
-              description: "Turn counterflow on/off"
-              example: true
-              selector:
-                boolean:
-            target_temperature:
-              description: "Target water temperature in Celsius"
-              example: 25.5
-              selector:
-                number:
-                  min: 0
-                  max: 40
-                  step: 0.5
-                  unit_of_measurement: "°C"
-            target_orp:
-              description: "Target ORP value in mV"
-              example: 650
-              selector:
-                number:
-                  min: 100
-                  max: 800
-                  step: 10
-                  unit_of_measurement: "mV"
-            target_ph:
-              description: "Target pH value"
-              example: 7.4
-              selector:
-                number:
-                  min: 7
-                  max: 8
-                  step: 0.05
-            agent_volume:
-              description: "Remaining Agent A volume in liters"
-              example: 45.2
-              selector:
-                number:
-                  min: 0
-                  max: 60
-                  step: 0.1
-                  unit_of_measurement: "L"
-            heater_mode:
-              description: "Heater mode setting"
-              example: "AUTO"
-              selector:
-                select:
-                  options:
-                    - "HEATING"
-                    - "AUTO"
-                    - "DISABLED"
 
 ixfield_device_service_sequence:
   name: "IXField Device Service Sequence"
