@@ -5,8 +5,5 @@
   "filename": "custom_components/ixfield",
   "content_in_root": false,
   "hacs": "1.0.0",
-  "hide_default_branch": false,
-  "country": [
-    "ALL"
-  ]
+  "hide_default_branch": false
 }
