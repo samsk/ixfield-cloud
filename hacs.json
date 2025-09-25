@@ -1,7 +1,6 @@
 {
   "name": "IXField Things Cloud Integration",
   "render_readme": true,
-  "filename": "custom_components/ixfield",
   "content_in_root": false,
   "hacs": "1.0.0",
   "hide_default_branch": false
