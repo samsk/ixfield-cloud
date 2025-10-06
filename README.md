@@ -7,7 +7,7 @@
 A comprehensive Home Assistant integration for IXField Cloud pool and spa controllers. This integration provides full control and monitoring capabilities for IXField devices, including dynamic sensor discovery, device control, and comprehensive device information.
 
 ## Tested Devices
-- PoolMatix
+- PoolMatix / PoolMatixPro
 
 ## 🏊‍♂️ Features
 
