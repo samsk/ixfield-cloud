@@ -24,6 +24,12 @@ from .sensor import get_sensor_config
 
 _LOGGER = logging.getLogger(__name__)
 
+# Climate sensor configuration constants
+CLIMATE_TEMPERATURE_SENSOR = "poolTempWithSettings"  # Temperature sensor
+CLIMATE_TARGET_TEMPERATURE_SENSOR = "poolTempWithSettings"  # Target temperature sensor (same as current)
+CLIMATE_MODE_SENSOR = "targetHeaterMode"  # Controls heating/cooling mode
+CLIMATE_STATUS_SENSOR = "heaterMode"      # Shows current heating status
+
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up IXField climate entities from a config entry."""
@@ -48,58 +54,89 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             f"Available operating values: {[v.get('name') for v in operating_values]}"
         )
 
-        # Find temperature sensors that end with "WithSettings" and have Celsius units
+        # Check if required sensors exist before creating climate entities
+        available_sensor_names = [sensor.get("name") for sensor in operating_values if sensor.get("name")]
+        _LOGGER.debug(f"Available sensors on device {device_id}: {available_sensor_names}")
+        
+        # Find the specific temperature sensor
+        temp_sensor_data = None
         for sensor_data in operating_values:
-            sensor_name = sensor_data.get("name")
-            if not sensor_name or not sensor_name.endswith("WithSettings"):
-                _LOGGER.debug(
-                    f"Skipping sensor {sensor_name} - doesn't end with 'WithSettings'"
-                )
-                continue
+            if sensor_data.get("name") == CLIMATE_TEMPERATURE_SENSOR:
+                temp_sensor_data = sensor_data
+                break
 
-            config = get_sensor_config(sensor_name, sensor_data)
+        if not temp_sensor_data:
+            _LOGGER.info(
+                f"No temperature sensor {CLIMATE_TEMPERATURE_SENSOR} found on device {device_id}, skipping climate entity"
+            )
+            continue
+
+        # Validate temperature sensor has required properties
+        if not temp_sensor_data.get("value"):
+            _LOGGER.warning(
+                f"Temperature sensor {CLIMATE_TEMPERATURE_SENSOR} exists but has no value, skipping climate entity"
+            )
+            continue
+
+        config = get_sensor_config(CLIMATE_TEMPERATURE_SENSOR, temp_sensor_data)
+        _LOGGER.debug(
+            f"Processing climate candidate: {CLIMATE_TEMPERATURE_SENSOR}, config: {config}"
+        )
+
+        # Check if this is a temperature sensor with Celsius units
+        _LOGGER.debug(
+            f"Comparing unit: config['unit'] = {config['unit']}, UnitOfTemperature.CELSIUS = {UnitOfTemperature.CELSIUS}"
+        )
+        if config["unit"] != UnitOfTemperature.CELSIUS:
+            _LOGGER.warning(
+                f"Temperature sensor {CLIMATE_TEMPERATURE_SENSOR} unit is {config['unit']}, not Celsius, skipping climate entity"
+            )
+            continue
+
+        # Look for corresponding mode sensor using hardcoded name
+        mode_sensor = None
+        for mode_data in operating_values:
+            if mode_data.get("name") == CLIMATE_MODE_SENSOR:
+                mode_sensor = mode_data
+                break
+
+        if not mode_sensor:
+            _LOGGER.warning(
+                f"No mode sensor {CLIMATE_MODE_SENSOR} found for temperature sensor {CLIMATE_TEMPERATURE_SENSOR}, skipping climate entity"
+            )
+            continue
+
+        # Validate mode sensor has required properties
+        if not mode_sensor.get("value"):
+            _LOGGER.warning(
+                f"Mode sensor {CLIMATE_MODE_SENSOR} exists but has no value, skipping climate entity"
+            )
+            continue
+
+        _LOGGER.info(
+            f"Creating climate entity for temperature sensor {CLIMATE_TEMPERATURE_SENSOR} with mode sensor {CLIMATE_MODE_SENSOR}"
+        )
+
+        climate_entity = IxfieldClimate(
+            coordinator, device_id, device_name, CLIMATE_TEMPERATURE_SENSOR, config, mode_sensor
+        )
+
+        if climate_entity.unique_id not in created_unique_ids:
+            climates.append(climate_entity)
+            created_unique_ids.add(climate_entity.unique_id)
+            _LOGGER.debug(f"Created climate entity: {climate_entity.name}")
+        else:
             _LOGGER.debug(
-                f"Processing climate candidate: {sensor_name}, config: {config}"
+                f"Climate entity {climate_entity.name} already exists, skipping"
             )
 
-            # Check if this is a temperature sensor with Celsius units
-            _LOGGER.debug(
-                f"Comparing unit: config['unit'] = {config['unit']}, UnitOfTemperature.CELSIUS = {UnitOfTemperature.CELSIUS}"
-            )
-            if config["unit"] != UnitOfTemperature.CELSIUS:
-                _LOGGER.debug(
-                    f"Skipping sensor {sensor_name} - unit is {config['unit']}, not Celsius"
-                )
-                continue
-
-            # Look for corresponding mode sensor
-            mode_sensor_name = sensor_name.replace("WithSettings", "Mode")
-            mode_sensor = None
-
-            for mode_data in operating_values:
-                if mode_data.get("name") == mode_sensor_name:
-                    mode_sensor = mode_data
-                    break
-
-            if not mode_sensor:
-                _LOGGER.debug(
-                    f"No mode sensor found for {sensor_name}, looking for {mode_sensor_name}"
-                )
-
-            climate_entity = IxfieldClimate(
-                coordinator, device_id, device_name, sensor_name, config, mode_sensor
-            )
-
-            if climate_entity.unique_id not in created_unique_ids:
-                climates.append(climate_entity)
-                created_unique_ids.add(climate_entity.unique_id)
-                _LOGGER.debug(f"Created climate entity: {climate_entity.name}")
-            else:
-                _LOGGER.debug(
-                    f"Climate entity {climate_entity.name} already exists, skipping"
-                )
-
-    _LOGGER.info(f"Created {len(climates)} climate entities")
+    # Log summary of climate entity creation
+    if climates:
+        climate_names = [climate.name for climate in climates]
+        _LOGGER.info(f"Created {len(climates)} climate entities: {climate_names}")
+    else:
+        _LOGGER.info("No climate entities created - no valid temperature sensors with mode sensors found")
+    
     async_add_entities(climates)
 
 

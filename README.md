@@ -371,6 +371,15 @@ If you need help with this integration:
 
 ## 🔄 Changelog
 
+### Version 0.2.3
+- Fix climate sensor mode setting
+
+### Version 0.2.2
+- All HACS tests passing but not enough, publishing to HACS
+
+### Version 0.2.1
+- All HACS tests passing but not enough, publishing to HACS
+
 ### Version 0.2.0
 - All tests passing, publishing to HACS
 
